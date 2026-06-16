@@ -231,6 +231,119 @@ impl LendingPoolContract {
         Ok(())
     }
 
+    /// Disburse funds from the pool for an approved loan.
+    ///
+    /// Transfers the specified amount to the recipient (e.g., a contractor
+    /// or the milestone disbursement contract). Can be called multiple times
+    /// for milestone-based releases up to the loan principal.
+    pub fn disburse(
+        env: Env,
+        loan_id: BytesN<32>,
+        recipient: Address,
+        amount: i128,
+    ) -> Result<(), PoolError> {
+        if amount <= 0 {
+            return Err(PoolError::InvalidAmount);
+        }
+
+        let config = Self::read_config(&env)?;
+        config.admin.require_auth();
+
+        let mut loan = Self::read_loan(&env, &loan_id)?;
+
+        if loan.status != LoanStatus::Approved {
+            return Err(PoolError::InvalidLoanState);
+        }
+
+        // Cannot disburse more than the remaining principal.
+        if loan.disbursed + amount > loan.principal {
+            return Err(PoolError::InvalidAmount);
+        }
+
+        // Verify pool liquidity.
+        let liquidity = Self::read_total_liquidity(&env);
+        if liquidity < amount {
+            return Err(PoolError::InsufficientLiquidity);
+        }
+
+        // Transfer funds to recipient.
+        let token = Self::token_client(&env, &config.token);
+        token.transfer(&env.current_contract_address(), &recipient, &amount);
+
+        loan.disbursed += amount;
+        Self::set_loan(&env, &loan_id, &loan);
+
+        // Reduce available liquidity.
+        let new_liquidity = liquidity - amount;
+        env.storage()
+            .instance()
+            .set(&DataKey::TotalLiquidity, &new_liquidity);
+
+        env.storage()
+            .instance()
+            .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
+
+        Ok(())
+    }
+
+    /// Borrower repays toward an approved loan.
+    ///
+    /// Transfers USDC from the borrower to the pool. Once the full
+    /// principal + interest is repaid, the loan is marked as Repaid.
+    pub fn repay(
+        env: Env,
+        borrower: Address,
+        loan_id: BytesN<32>,
+        amount: i128,
+    ) -> Result<(), PoolError> {
+        borrower.require_auth();
+
+        if amount <= 0 {
+            return Err(PoolError::InvalidAmount);
+        }
+
+        let config = Self::read_config(&env)?;
+        let mut loan = Self::read_loan(&env, &loan_id)?;
+
+        if loan.status != LoanStatus::Approved {
+            return Err(PoolError::InvalidLoanState);
+        }
+
+        // Calculate total owed (principal + simple interest).
+        let interest = (loan.principal * loan.interest_rate_bps as i128) / 10_000;
+        let total_owed = loan.principal + interest;
+        let remaining = total_owed - loan.repaid;
+
+        if amount > remaining {
+            return Err(PoolError::OverPayment);
+        }
+
+        // Transfer USDC from borrower to pool.
+        let token = Self::token_client(&env, &config.token);
+        token.transfer(&borrower, &env.current_contract_address(), &amount);
+
+        loan.repaid += amount;
+
+        // Mark as repaid if fully paid.
+        if loan.repaid >= total_owed {
+            loan.status = LoanStatus::Repaid;
+        }
+
+        Self::set_loan(&env, &loan_id, &loan);
+
+        // Increase available liquidity with the repayment.
+        let liquidity = Self::read_total_liquidity(&env) + amount;
+        env.storage()
+            .instance()
+            .set(&DataKey::TotalLiquidity, &liquidity);
+
+        env.storage()
+            .instance()
+            .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
+
+        Ok(())
+    }
+
     // ── Query Functions ──────────────────────────────────────────────────
 
     /// Returns the pool configuration.
@@ -407,5 +520,84 @@ mod test {
         let contract_id = env.register(LendingPoolContract, ());
         let client = LendingPoolContractClient::new(&env, &contract_id);
         assert_eq!(client.version(), 1);
+    }
+
+    #[test]
+    fn test_disburse_and_repay_full_lifecycle() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let (_admin, investor, token_address, client) = setup_pool(&env);
+        let token = token::Client::new(&env, &token_address);
+        let borrower = Address::generate(&env);
+        let contractor = Address::generate(&env);
+        let loan_id = mock_loan_id(&env);
+
+        // Fund the pool.
+        client.deposit(&investor, &70_000_0000000i128);
+
+        // Request + approve loan.
+        client.request_loan(&borrower, &loan_id, &70_000_0000000i128);
+        client.approve_loan(&loan_id);
+
+        // Disburse 30,000 to contractor (first milestone).
+        client.disburse(&loan_id, &contractor, &30_000_0000000i128);
+        assert_eq!(token.balance(&contractor), 30_000_0000000i128);
+        assert_eq!(client.get_liquidity(), 40_000_0000000i128);
+
+        // Disburse remaining 40,000.
+        client.disburse(&loan_id, &contractor, &40_000_0000000i128);
+        let loan = client.get_loan_info(&loan_id);
+        assert_eq!(loan.disbursed, 70_000_0000000i128);
+
+        // Borrower repays. Total owed = 70,000 + 8% = 75,600.
+        let sac = StellarAssetClient::new(&env, &token_address);
+        sac.mint(&borrower, &80_000_0000000i128);
+
+        client.repay(&borrower, &loan_id, &75_600_0000000i128);
+        let loan = client.get_loan_info(&loan_id);
+        assert_eq!(loan.status, LoanStatus::Repaid);
+        assert_eq!(loan.repaid, 75_600_0000000i128);
+    }
+
+    #[test]
+    fn test_disburse_over_principal_fails() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let (_admin, investor, _token_address, client) = setup_pool(&env);
+        let borrower = Address::generate(&env);
+        let contractor = Address::generate(&env);
+        let loan_id = mock_loan_id(&env);
+
+        client.deposit(&investor, &50_000_0000000i128);
+        client.request_loan(&borrower, &loan_id, &10_000_0000000i128);
+        client.approve_loan(&loan_id);
+
+        // Try to disburse more than principal.
+        let result = client.try_disburse(&loan_id, &contractor, &20_000_0000000i128);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_repay_overpayment_fails() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let (_admin, investor, token_address, client) = setup_pool(&env);
+        let borrower = Address::generate(&env);
+        let loan_id = mock_loan_id(&env);
+
+        client.deposit(&investor, &50_000_0000000i128);
+        client.request_loan(&borrower, &loan_id, &10_000_0000000i128);
+        client.approve_loan(&loan_id);
+
+        // Mint USDC to borrower for repayment.
+        let sac = StellarAssetClient::new(&env, &token_address);
+        sac.mint(&borrower, &20_000_0000000i128);
+
+        // Total owed = 10,000 + 8% = 10,800. Try to repay 15,000.
+        let result = client.try_repay(&borrower, &loan_id, &15_000_0000000i128);
+        assert!(result.is_err());
     }
 }
