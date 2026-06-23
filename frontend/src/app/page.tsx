@@ -1,4 +1,7 @@
 import Link from "next/link";
+import dynamic from "next/dynamic";
+
+const Navbar = dynamic(() => import("../components/Navbar"), { ssr: false });
 
 const STATS = [
   { label: "Average Remittance Tracked", value: "$2,400", suffix: "/yr" },
@@ -99,31 +102,7 @@ export default function LandingPage() {
   return (
     <main>
       {/* ── Navbar ──────────────────────────────────────────── */}
-      <nav className="fixed top-0 left-0 right-0 z-50 backdrop-blur-xl bg-[var(--bg-primary)]/80 border-b border-[var(--border-color)]">
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-cyan-500 flex items-center justify-center">
-              <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" className="w-4 h-4">
-                <path d="M3 21h18" />
-                <path d="M5 21V7l7-4 7 4v14" />
-              </svg>
-            </div>
-            <span className="text-lg font-bold tracking-tight">
-              Remit<span className="text-[var(--accent-primary-light)]">Mortgage</span>
-            </span>
-          </div>
-
-          <div className="hidden md:flex items-center gap-8 text-sm text-[var(--text-secondary)]">
-            <a href="#how-it-works" className="hover:text-[var(--text-primary)] transition-colors">How It Works</a>
-            <a href="#features" className="hover:text-[var(--text-primary)] transition-colors">Features</a>
-            <a href="#stats" className="hover:text-[var(--text-primary)] transition-colors">Protocol</a>
-          </div>
-
-          <button className="btn-primary !py-2.5 !px-5 !text-sm">
-            Connect Wallet
-          </button>
-        </div>
-      </nav>
+      <Navbar />
 
       {/* ── Hero Section ───────────────────────────────────── */}
       <section className="hero-bg relative pt-32 pb-24 px-6 min-h-[90vh] flex items-center">

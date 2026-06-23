@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { validateBorrowerParams } from "../middleware/validate.js";
 
 export const borrowerRouter = Router();
 
@@ -9,7 +10,7 @@ export const borrowerRouter = Router();
  * escrow balance, loan status, repayment progress, etc.
  * (Placeholder — will integrate with Soroban contract queries)
  */
-borrowerRouter.get("/:address/status", async (req, res) => {
+borrowerRouter.get("/:address/status", validateBorrowerParams, async (req, res) => {
   try {
     const { address } = req.params;
 

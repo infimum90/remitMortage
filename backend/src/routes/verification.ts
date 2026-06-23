@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { analyzeRemittanceHistory } from "../services/stellar.js";
+import { validateVerificationBody } from "../middleware/validate.js";
 
 export const verificationRouter = Router();
 
@@ -12,16 +13,11 @@ export const verificationRouter = Router();
  *
  * Body: { senderAddress: string, recipientAddress: string }
  */
-verificationRouter.post("/check", async (req, res) => {
+verificationRouter.post("/check", validateVerificationBody, async (req, res) => {
   try {
     const { senderAddress, recipientAddress } = req.body;
 
-    if (!senderAddress || !recipientAddress) {
-      res.status(400).json({
-        error: "Missing required fields: senderAddress, recipientAddress",
-      });
-      return;
-    }
+    // Validation middleware ensures inputs are present and valid
 
     const result = await analyzeRemittanceHistory(
       senderAddress,
