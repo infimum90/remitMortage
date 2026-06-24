@@ -18,6 +18,8 @@ pub struct PoolConfig {
 pub struct InvestorRecord {
     /// Total deposited by this investor.
     pub deposited: i128,
+    /// Yield already claimed by this investor.
+    pub claimed_yield: i128,
     /// Ledger when first deposit was made.
     pub start_ledger: u32,
 }
@@ -71,4 +73,10 @@ pub enum DataKey {
     Loan(BytesN<32>),
     /// Total number of active loans (for tracking).
     LoanCount,
+    /// Total interest repaid to the pool.
+    TotalRepaidInterest,
+    /// Sum of all principal - disbursed for Approved loans.
+    ActiveLoanCommitments,
+    /// Sum of all investor deposits minus withdrawals.
+    TotalDeposited,
 }

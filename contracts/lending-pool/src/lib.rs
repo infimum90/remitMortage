@@ -34,6 +34,7 @@ impl LendingPoolContract {
             .get(&DataKey::Investor(investor.clone()))
             .unwrap_or(InvestorRecord {
                 deposited: 0,
+                claimed_yield: 0,
                 start_ledger: 0,
             })
     }
@@ -48,6 +49,27 @@ impl LendingPoolContract {
         env.storage()
             .instance()
             .get(&DataKey::TotalLiquidity)
+            .unwrap_or(0i128)
+    }
+
+    fn read_total_deposited(env: &Env) -> i128 {
+        env.storage()
+            .instance()
+            .get(&DataKey::TotalDeposited)
+            .unwrap_or(0i128)
+    }
+
+    fn read_total_repaid_interest(env: &Env) -> i128 {
+        env.storage()
+            .instance()
+            .get(&DataKey::TotalRepaidInterest)
+            .unwrap_or(0i128)
+    }
+
+    fn read_active_commitments(env: &Env) -> i128 {
+        env.storage()
+            .instance()
+            .get(&DataKey::ActiveLoanCommitments)
             .unwrap_or(0i128)
     }
 
@@ -100,6 +122,9 @@ impl LendingPoolContract {
             .instance()
             .set(&DataKey::TotalLiquidity, &0i128);
         env.storage().instance().set(&DataKey::LoanCount, &0u32);
+        env.storage().instance().set(&DataKey::TotalRepaidInterest, &0i128);
+        env.storage().instance().set(&DataKey::ActiveLoanCommitments, &0i128);
+        env.storage().instance().set(&DataKey::TotalDeposited, &0i128);
         env.storage()
             .instance()
             .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
@@ -132,11 +157,16 @@ impl LendingPoolContract {
         record.deposited += amount;
         Self::set_investor(&env, &investor, &record);
 
-        // Update total liquidity.
+        // Update total liquidity and total deposited.
         let total = Self::read_total_liquidity(&env) + amount;
         env.storage()
             .instance()
             .set(&DataKey::TotalLiquidity, &total);
+        
+        let total_dep = Self::read_total_deposited(&env) + amount;
+        env.storage()
+            .instance()
+            .set(&DataKey::TotalDeposited, &total_dep);
 
         env.storage()
             .instance()
@@ -225,14 +255,18 @@ impl LendingPoolContract {
             return Err(PoolError::InvalidLoanState);
         }
 
-        // Verify pool has enough liquidity.
+        // Verify pool has enough liquidity accounting for active commitments.
         let liquidity = Self::read_total_liquidity(&env);
-        if liquidity < loan.principal {
+        let active_commitments = Self::read_active_commitments(&env);
+        if liquidity - active_commitments < loan.principal {
             return Err(PoolError::InsufficientLiquidity);
         }
 
         loan.status = LoanStatus::Approved;
         Self::set_loan(&env, &loan_id, &loan);
+
+        let new_commitments = active_commitments + loan.principal;
+        env.storage().instance().set(&DataKey::ActiveLoanCommitments, &new_commitments);
 
         env.storage()
             .instance()
@@ -294,6 +328,12 @@ impl LendingPoolContract {
             .instance()
             .set(&DataKey::TotalLiquidity, &new_liquidity);
 
+        // Reduce active loan commitments.
+        let active_commitments = Self::read_active_commitments(&env);
+        env.storage()
+            .instance()
+            .set(&DataKey::ActiveLoanCommitments, &(active_commitments - amount));
+
         env.storage()
             .instance()
             .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
@@ -342,11 +382,38 @@ impl LendingPoolContract {
         let token = Self::token_client(&env, &config.token);
         token.transfer(&borrower, &env.current_contract_address(), &amount);
 
+        let old_repaid = loan.repaid;
         loan.repaid += amount;
+
+        let mut interest_paid = 0i128;
+        if loan.repaid > loan.principal {
+            let interest_start = if old_repaid > loan.principal {
+                old_repaid
+            } else {
+                loan.principal
+            };
+            interest_paid = loan.repaid - interest_start;
+        }
+
+        if interest_paid > 0 {
+            let total_interest = Self::read_total_repaid_interest(&env) + interest_paid;
+            env.storage()
+                .instance()
+                .set(&DataKey::TotalRepaidInterest, &total_interest);
+        }
 
         // Mark as repaid if fully paid.
         if loan.repaid >= total_owed {
             loan.status = LoanStatus::Repaid;
+            
+            // Release any undisbursed locked commitments
+            let undisbursed = loan.principal - loan.disbursed;
+            if undisbursed > 0 {
+                let active_commitments = Self::read_active_commitments(&env);
+                env.storage()
+                    .instance()
+                    .set(&DataKey::ActiveLoanCommitments, &(active_commitments - undisbursed));
+            }
         }
 
         Self::set_loan(&env, &loan_id, &loan);
@@ -369,7 +436,110 @@ impl LendingPoolContract {
         Ok(())
     }
 
+    /// Investor withdraws available capital.
+    pub fn withdraw(env: Env, investor: Address, amount: i128) -> Result<(), PoolError> {
+        investor.require_auth();
+
+        if amount <= 0 {
+            return Err(PoolError::InvalidAmount);
+        }
+
+        let mut record = Self::read_investor(&env, &investor);
+        if record.deposited < amount {
+            return Err(PoolError::InsufficientBalance);
+        }
+
+        let liquidity = Self::read_total_liquidity(&env);
+        let active_commitments = Self::read_active_commitments(&env);
+        let available_liquidity = liquidity - active_commitments;
+
+        if available_liquidity < amount {
+            return Err(PoolError::InsufficientLiquidity);
+        }
+
+        let config = Self::read_config(&env)?;
+        
+        // Update state first
+        record.deposited -= amount;
+        Self::set_investor(&env, &investor, &record);
+
+        let new_liquidity = liquidity - amount;
+        env.storage()
+            .instance()
+            .set(&DataKey::TotalLiquidity, &new_liquidity);
+
+        let total_dep = Self::read_total_deposited(&env) - amount;
+        env.storage()
+            .instance()
+            .set(&DataKey::TotalDeposited, &total_dep);
+
+        // Transfer funds back to investor
+        let token = Self::token_client(&env, &config.token);
+        token.transfer(&env.current_contract_address(), &investor, &amount);
+
+        env.storage()
+            .instance()
+            .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
+
+        Ok(())
+    }
+
+    /// Investor claims their proportional share of repaid interest.
+    pub fn claim_yield(env: Env, investor: Address) -> Result<i128, PoolError> {
+        investor.require_auth();
+
+        let mut record = Self::read_investor(&env, &investor);
+        if record.deposited == 0 && record.claimed_yield == 0 {
+            return Err(PoolError::InsufficientBalance);
+        }
+
+        let pending_yield = Self::calculate_pending_yield(&env, &record);
+        if pending_yield <= 0 {
+            return Ok(0);
+        }
+
+        let config = Self::read_config(&env)?;
+
+        // Update state
+        record.claimed_yield += pending_yield;
+        Self::set_investor(&env, &investor, &record);
+
+        let liquidity = Self::read_total_liquidity(&env) - pending_yield;
+        env.storage()
+            .instance()
+            .set(&DataKey::TotalLiquidity, &liquidity);
+
+        // Transfer yield
+        let token = Self::token_client(&env, &config.token);
+        token.transfer(&env.current_contract_address(), &investor, &pending_yield);
+
+        env.storage()
+            .instance()
+            .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
+
+        Ok(pending_yield)
+    }
+
     // ── Query Functions ──────────────────────────────────────────────────
+
+    fn calculate_pending_yield(env: &Env, record: &InvestorRecord) -> i128 {
+        let total_dep = Self::read_total_deposited(env);
+        if total_dep == 0 {
+            return 0;
+        }
+
+        let total_interest = Self::read_total_repaid_interest(env);
+        
+        // Math: (investor.deposited * total_interest) / total_deposited
+        // Note: Using point-in-time calculation as accepted in the implementation plan
+        let share = (record.deposited * total_interest) / total_dep;
+        
+        if share > record.claimed_yield {
+            share - record.claimed_yield
+        } else {
+            0
+        }
+    }
 
     /// Returns the pool configuration.
     pub fn get_pool_config(env: Env) -> Result<PoolConfig, PoolError> {
@@ -379,6 +549,30 @@ impl LendingPoolContract {
     /// Returns the total available liquidity.
     pub fn get_liquidity(env: Env) -> i128 {
         Self::read_total_liquidity(&env)
+    }
+
+    /// Returns the maximum amount an investor can currently withdraw.
+    pub fn get_available_withdrawal(env: Env, investor: Address) -> i128 {
+        let record = Self::read_investor(&env, &investor);
+        let liquidity = Self::read_total_liquidity(&env);
+        let active_commitments = Self::read_active_commitments(&env);
+        
+        let available = liquidity - active_commitments;
+        if available < 0 {
+            return 0;
+        }
+        
+        if record.deposited < available {
+            record.deposited
+        } else {
+            available
+        }
+    }
+
+    /// Returns the amount of yield available to claim.
+    pub fn get_pending_yield(env: Env, investor: Address) -> i128 {
+        let record = Self::read_investor(&env, &investor);
+        Self::calculate_pending_yield(&env, &record)
     }
 
     /// Returns an investor's record.
@@ -634,5 +828,151 @@ mod test {
         // Total owed = 10,000 + 8% = 10,800. Try to repay 15,000.
         let result = client.try_repay(&borrower, &loan_id, &15_000_0000000i128);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_withdraw() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let (_admin, investor, token_address, client) = setup_pool(&env);
+        let token = token::Client::new(&env, &token_address);
+
+        client.deposit(&investor, &50_000_0000000i128);
+        
+        // Investor withdraws 20,000
+        client.withdraw(&investor, &20_000_0000000i128);
+
+        assert_eq!(client.get_liquidity(), 30_000_0000000i128);
+        
+        let record = client.get_investor_info(&investor);
+        assert_eq!(record.deposited, 30_000_0000000i128);
+        assert_eq!(token.balance(&investor), 70_000_0000000i128); // Started with 100k, deposited 50k, withdrew 20k
+    }
+
+    #[test]
+    fn test_withdraw_exceeds_liquidity() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let (_admin, investor, _token_address, client) = setup_pool(&env);
+        let borrower = Address::generate(&env);
+        let loan_id = mock_loan_id(&env);
+
+        client.deposit(&investor, &50_000_0000000i128);
+        
+        // Active loan commitment consumes 40,000 liquidity
+        client.request_loan(&borrower, &loan_id, &40_000_0000000i128);
+        client.approve_loan(&loan_id);
+
+        // Available withdrawal is 50,000 - 40,000 = 10,000
+        assert_eq!(client.get_available_withdrawal(&investor), 10_000_0000000i128);
+
+        // Attempting to withdraw 20,000 should fail
+        let result = client.try_withdraw(&investor, &20_000_0000000i128);
+        assert_eq!(result.unwrap_err(), Ok(soroban_sdk::Error::from_contract_error(9))); // InsufficientLiquidity = 9
+    }
+
+    #[test]
+    fn test_yield_distribution() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let (_admin, investor1, token_address, client) = setup_pool(&env);
+        
+        // Setup investor 2
+        let investor2 = Address::generate(&env);
+        let sac = StellarAssetClient::new(&env, &token_address);
+        sac.mint(&investor2, &100_000_0000000i128);
+
+        let borrower = Address::generate(&env);
+        let loan_id = mock_loan_id(&env);
+
+        // Investor 1 & 2 each deposit 50,000 (50% share)
+        client.deposit(&investor1, &50_000_0000000i128);
+        client.deposit(&investor2, &50_000_0000000i128);
+
+        client.request_loan(&borrower, &loan_id, &100_000_0000000i128);
+        client.approve_loan(&loan_id);
+        
+        sac.mint(&borrower, &110_000_0000000i128); // Fund borrower to repay
+        client.repay(&borrower, &loan_id, &108_000_0000000i128); // 100k principal + 8k interest
+
+        // Check pending yield (each should get 4k)
+        assert_eq!(client.get_pending_yield(&investor1), 4_000_0000000i128);
+        assert_eq!(client.get_pending_yield(&investor2), 4_000_0000000i128);
+
+        let bal1_before = StellarAssetClient::new(&env, &token_address).balance(&investor1);
+        client.claim_yield(&investor1);
+        let bal1_after = StellarAssetClient::new(&env, &token_address).balance(&investor1);
+        
+        assert_eq!(bal1_after - bal1_before, 4_000_0000000i128);
+        
+        let record = client.get_investor_info(&investor1);
+        assert_eq!(record.claimed_yield, 4_000_0000000i128);
+    }
+
+    #[test]
+    fn test_double_claim() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let (_admin, investor, token_address, client) = setup_pool(&env);
+        let borrower = Address::generate(&env);
+        let loan_id = mock_loan_id(&env);
+
+        client.deposit(&investor, &100_000_0000000i128);
+        client.request_loan(&borrower, &loan_id, &10_000_0000000i128);
+        client.approve_loan(&loan_id);
+
+        let sac = StellarAssetClient::new(&env, &token_address);
+        sac.mint(&borrower, &20_000_0000000i128);
+        client.repay(&borrower, &loan_id, &10_800_0000000i128);
+
+        let claimed = client.claim_yield(&investor);
+        assert_eq!(claimed, 800_0000000i128);
+
+        // Double claim should return 0
+        let claimed_second = client.claim_yield(&investor);
+        assert_eq!(claimed_second, 0);
+    }
+
+    #[test]
+    fn test_withdrawal_after_yield() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let (_admin, investor, token_address, client) = setup_pool(&env);
+        let borrower = Address::generate(&env);
+        let loan_id = mock_loan_id(&env);
+
+        client.deposit(&investor, &100_000_0000000i128);
+        client.request_loan(&borrower, &loan_id, &10_000_0000000i128);
+        client.approve_loan(&loan_id);
+
+        let sac = StellarAssetClient::new(&env, &token_address);
+        sac.mint(&borrower, &20_000_0000000i128);
+        client.repay(&borrower, &loan_id, &10_800_0000000i128);
+
+        client.claim_yield(&investor);
+
+        // Now withdraw
+        client.withdraw(&investor, &50_000_0000000i128);
+
+        let record = client.get_investor_info(&investor);
+        assert_eq!(record.deposited, 50_000_0000000i128);
+        assert_eq!(record.claimed_yield, 800_0000000i128);
+    }
+
+    #[test]
+    #[should_panic(expected = "HostError: Error(Auth, InvalidAction)")]
+    fn test_unauthorized_withdrawal() {
+        let env = Env::default();
+
+        let (_admin, _investor, _token_address, client) = setup_pool(&env);
+        let unauthorized = Address::generate(&env);
+        
+        // This will panic because unauthorized doesn't have auth mocked.
+        client.withdraw(&unauthorized, &10_000_0000000i128);
     }
 }
