@@ -30,6 +30,7 @@ function InnerNavbar() {
             <a href="#how-it-works" className="hover:text-[var(--text-primary)] transition-colors">How It Works</a>
             <a href="#features" className="hover:text-[var(--text-primary)] transition-colors">Features</a>
             <a href="#stats" className="hover:text-[var(--text-primary)] transition-colors">Protocol</a>
+            <a href="/analytics" className="hover:text-[var(--text-primary)] transition-colors">Analytics</a>
             <a href="/dashboard" className="hover:text-[var(--text-primary)] transition-colors">Dashboard</a>
           </div>
 

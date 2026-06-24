@@ -108,7 +108,7 @@ describe("Contractor Portal Tests", () => {
 
     // Verify CID is displayed
     expect(screen.getByText("Upload Successful")).toBeInTheDocument();
-    expect(screen.getByText(\`CID: \${mockCid}\`)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "View on IPFS" })).toHaveAttribute("href", \`https://ipfs.io/ipfs/\${mockCid}\`);
+    expect(screen.getByText(`CID: ${mockCid}`)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "View on IPFS" })).toHaveAttribute("href", `https://ipfs.io/ipfs/${mockCid}`);
   });
 });

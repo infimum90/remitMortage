@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
     const randomHash = Array.from({ length: 44 })
       .map(() => Math.floor(Math.random() * 16).toString(16))
       .join("");
-    const fakeCid = \`bafybeig\${randomHash}\`;
+    const fakeCid = `bafybeig${randomHash}`;
 
     return NextResponse.json({
       success: true,

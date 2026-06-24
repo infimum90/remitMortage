@@ -115,7 +115,7 @@ export default function EvidenceUpload({ milestoneId, onUploadSuccess }: Evidenc
           <button 
             onClick={handleUpload}
             disabled={!file || isUploading}
-            className={\`w-full py-2 rounded-md font-semibold transition-colors \${!file || isUploading ? 'bg-gray-700 text-gray-400 cursor-not-allowed' : 'bg-[var(--success)] text-white hover:bg-emerald-400'}\`}
+            className={`w-full py-2 rounded-md font-semibold transition-colors ${!file || isUploading ? 'bg-gray-700 text-gray-400 cursor-not-allowed' : 'bg-[var(--success)] text-white hover:bg-emerald-400'}`}
           >
             {isUploading ? "Uploading to IPFS..." : "Submit Evidence"}
           </button>
@@ -133,7 +133,7 @@ export default function EvidenceUpload({ milestoneId, onUploadSuccess }: Evidenc
             CID: {cid}
           </div>
           <a 
-            href={\`https://ipfs.io/ipfs/\${cid}\`} 
+            href={`https://ipfs.io/ipfs/${cid}`} 
             target="_blank" 
             rel="noreferrer"
             className="text-xs text-[var(--accent-secondary)] hover:underline"

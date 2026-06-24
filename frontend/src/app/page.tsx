@@ -1,7 +1,9 @@
-import dynamic from "next/dynamic";
-import OnboardingWizard from "@/components/OnboardingWizard";
+"use client"
 
-const Navbar = dynamic(() => import("../../components/Navbar"), { ssr: false });
+import dynamic from "next/dynamic";
+import OnboardingWizard from "./OnboardingWizard";
+
+const Navbar = dynamic(() => import("../components/Navbar"), { ssr: false });
 
 export default function OnboardingPage() {
   return (

@@ -1,7 +1,7 @@
 "use client"
 
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { Server } from "@stellar/stellar-sdk";
+import { Horizon } from "@stellar/stellar-sdk";
 
 type WalletContextType = {
   publicKey: string | null;
@@ -23,7 +23,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const [network, setNetwork] = useState<string | null>(null);
   const [wrongNetwork, setWrongNetwork] = useState<boolean>(false);
 
-  const server = new Server(HORIZON_TESTNET);
+  const server = new Horizon.Server(HORIZON_TESTNET);
 
   async function fetchBalances(pk: string) {
     try {

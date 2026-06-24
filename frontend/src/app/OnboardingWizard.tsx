@@ -2,10 +2,10 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { getOnboardingStore, useOnboardingState } from "@/hooks/useOnboardingState";
+import { getOnboardingStore, useOnboardingState } from "./useOnboardingState";
 import ProgressStepper from "./ProgressStepper";
 import { isConnected, getPublicKey } from "@stellar/freighter-api";
-import { SorobanRpc, TransactionBuilder, scValToNative, xdr } from "@stellar/stellar-sdk";
+import { rpc as SorobanRpc, Horizon, TransactionBuilder, Operation, scValToNative, xdr } from "@stellar/stellar-sdk";
 import { toast } from "react-hot-toast";
 
 const STEPS = ["Connect Wallet", "Verify History", "Set Goal", "First Deposit"];
@@ -28,10 +28,10 @@ export default function OnboardingWizard() {
   const [isLoading, setIsLoading] = useState(false);
   const [verificationMessage, setVerificationMessage] = useState("");
 
-  const HORIZON_URL = process.env.NEXT_PUBLIC_HORIZON_URL!;
-  const NETWORK_PASSPHRASE = process.env.NEXT_PUBLIC_NETWORK_PASSPHRASE!;
-  const ESCROW_CONTRACT_ID = process.env.NEXT_PUBLIC_ESCROW_CONTRACT_ID!;
-  const USDC_TOKEN_ID = process.env.NEXT_PUBLIC_USDC_TOKEN_ID!;
+  const HORIZON_URL = process.env.NEXT_PUBLIC_HORIZON_URL || "https://horizon-testnet.stellar.org";
+  const NETWORK_PASSPHRASE = process.env.NEXT_PUBLIC_NETWORK_PASSPHRASE || "Test SDF Network ; September 2015";
+  const ESCROW_CONTRACT_ID = process.env.NEXT_PUBLIC_ESCROW_CONTRACT_ID || "";
+  const USDC_TOKEN_ID = process.env.NEXT_PUBLIC_USDC_TOKEN_ID || "";
 
   const rpc = new SorobanRpc.Server(HORIZON_URL.replace("horizon", "rpc"));
 
@@ -61,10 +61,10 @@ export default function OnboardingWizard() {
 
   const fetchUSDCBalance = async (pk: string) => {
     try {
-      const server = new SorobanRpc.Server(HORIZON_URL);
-      const account = await server.getAccount(pk);
+      const server = new Horizon.Server(HORIZON_URL);
+      const account = await server.loadAccount(pk);
       const usdcBalanceLine = account.balances.find(
-        (b) => "asset_code" in b && b.asset_code === "USDC" && b.asset_issuer === USDC_TOKEN_ID
+        (b: any) => "asset_code" in b && b.asset_code === "USDC" && b.asset_issuer === USDC_TOKEN_ID
       );
       setUsdcBalance(usdcBalanceLine ? parseFloat(usdcBalanceLine.balance).toFixed(2) : "0.00");
     } catch (e) {
@@ -113,13 +113,13 @@ export default function OnboardingWizard() {
     toast.loading("Preparing transaction...");
 
     try {
-      const server = new SorobanRpc.Server(HORIZON_URL);
-      const source = await server.getAccount(publicKey);
+      const server = new Horizon.Server(HORIZON_URL);
+      const source = await server.loadAccount(publicKey);
 
       const tx = new TransactionBuilder(source, { fee: "10000", networkPassphrase: NETWORK_PASSPHRASE })
         .addOperation(
-          xdr.Operation.invokeHostFunction({
-            hostFunction: xdr.HostFunction.invokeContract(
+          Operation.invokeHostFunction({
+            func: xdr.HostFunction.hostFunctionTypeInvokeContract(
               xdr.InvokeContractArgs.fromXDR(
                 Buffer.from(
                   [
