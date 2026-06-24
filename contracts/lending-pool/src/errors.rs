@@ -24,4 +24,8 @@ pub enum PoolError {
     InsufficientLiquidity = 9,
     /// Repayment exceeds remaining loan balance.
     OverPayment = 10,
+    /// Investor cannot change tranche after the initial deposit.
+    TrancheMismatch = 11,
+    /// Junior tranche has insufficient capital to absorb this loss.
+    InsufficientJuniorCapital = 12,
 }
