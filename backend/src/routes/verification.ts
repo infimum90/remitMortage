@@ -1,6 +1,8 @@
 import { Router } from "express";
 import { Keypair } from "@stellar/stellar-sdk";
 import { analyzeRemittanceHistory } from "../services/stellar.js";
+import { validateVerificationBody } from "../middleware/validate.js";
+import { calculateCreditScore } from "../services/scoring.js";
 import { validateVerificationBody, validateWalletAddress } from "../middleware/validate.js";
 import { createChallenge, consumeChallenge } from "../services/challengeStore.js";
 
@@ -65,6 +67,12 @@ verificationRouter.post("/check", validateVerificationBody, async (req, res) => 
 
 /**
  * @openapi
+ * /api/verification/score:
+ *   post:
+ *     summary: Calculate borrower credit score
+ *     description: Analyzes remittance history and calculates a 0-100 credit score with tier mapping.
+ *     tags:
+ *       - Verification
  * /api/verification/challenge:
  *   post:
  *     summary: Issue a wallet-ownership challenge
@@ -74,6 +82,33 @@ verificationRouter.post("/check", validateVerificationBody, async (req, res) => 
  *       content:
  *         application/json:
  *           schema:
+ *             $ref: '#/components/schemas/VerificationCheckRequest'
+ *     responses:
+ *       200:
+ *         description: Scoring completed successfully.
+ *       400:
+ *         description: Missing fields.
+ *       500:
+ *         description: Scoring service failed.
+ */
+verificationRouter.post("/score", validateVerificationBody, async (req, res) => {
+  try {
+    const { senderAddress, recipientAddress } = req.body;
+
+    const analysisResult = await analyzeRemittanceHistory(
+      senderAddress,
+      recipientAddress
+    );
+
+    const scoreResult = calculateCreditScore(analysisResult);
+
+    res.json(scoreResult);
+  } catch (error) {
+    console.error("Scoring error:", error);
+    res.status(500).json({ error: "Scoring service failed" });
+  }
+});
+
  *             type: object
  *             required: [walletAddress]
  *             properties:
