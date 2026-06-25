@@ -2,10 +2,9 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { getOnboardingStore, useOnboardingState } from "@/hooks/useOnboardingState";
+import { getOnboardingStore, useOnboardingState } from "./useOnboardingState";
 import ProgressStepper from "./ProgressStepper";
 import { isConnected, getPublicKey } from "@stellar/freighter-api";
-import { SorobanRpc, TransactionBuilder, scValToNative, xdr } from "@stellar/stellar-sdk";
 import { toast } from "react-hot-toast";
 
 const STEPS = ["Connect Wallet", "Verify History", "Set Goal", "First Deposit"];
@@ -29,11 +28,7 @@ export default function OnboardingWizard() {
   const [verificationMessage, setVerificationMessage] = useState("");
 
   const HORIZON_URL = process.env.NEXT_PUBLIC_HORIZON_URL!;
-  const NETWORK_PASSPHRASE = process.env.NEXT_PUBLIC_NETWORK_PASSPHRASE!;
-  const ESCROW_CONTRACT_ID = process.env.NEXT_PUBLIC_ESCROW_CONTRACT_ID!;
   const USDC_TOKEN_ID = process.env.NEXT_PUBLIC_USDC_TOKEN_ID!;
-
-  const rpc = new SorobanRpc.Server(HORIZON_URL.replace("horizon", "rpc"));
 
   useEffect(() => {
     if (step === 1 && publicKey) {
@@ -61,14 +56,15 @@ export default function OnboardingWizard() {
 
   const fetchUSDCBalance = async (pk: string) => {
     try {
-      const server = new SorobanRpc.Server(HORIZON_URL);
-      const account = await server.getAccount(pk);
-      const usdcBalanceLine = account.balances.find(
-        (b) => "asset_code" in b && b.asset_code === "USDC" && b.asset_issuer === USDC_TOKEN_ID
+      const { Horizon } = await import("@stellar/stellar-sdk");
+      const server = new Horizon.Server(HORIZON_URL);
+      const account = await server.accounts().accountId(pk).call();
+      const usdcBalanceLine = (account.balances as any[]).find(
+        (b) => b.asset_code === "USDC" && b.asset_issuer === USDC_TOKEN_ID
       );
       setUsdcBalance(usdcBalanceLine ? parseFloat(usdcBalanceLine.balance).toFixed(2) : "0.00");
     } catch (e) {
-      console.warn("Could not fetch USDC balance. Account may not exist or have a trustline.", e);
+      console.warn("Could not fetch USDC balance.", e);
       setUsdcBalance("0.00");
     }
   };
@@ -113,54 +109,16 @@ export default function OnboardingWizard() {
     toast.loading("Preparing transaction...");
 
     try {
-      const server = new SorobanRpc.Server(HORIZON_URL);
-      const source = await server.getAccount(publicKey);
-
-      const tx = new TransactionBuilder(source, { fee: "10000", networkPassphrase: NETWORK_PASSPHRASE })
-        .addOperation(
-          xdr.Operation.invokeHostFunction({
-            hostFunction: xdr.HostFunction.invokeContract(
-              xdr.InvokeContractArgs.fromXDR(
-                Buffer.from(
-                  [
-                    "AAAAAQAAAAE=", // scvVec with 1 element
-                    "AAAAEw==", // scvSymbol
-                    "AAAAAAdkZXBvc2l0", // "deposit"
-                    "AAAAAgAAAAE=", // scvVec with 2 elements
-                    "AAAAFAAAAAMAAAAIAAAAQQ==", // scvAddress, scvAccount, public key
-                    `AAAAAAE=${Buffer.from(publicKey, "base64").toString("hex")}`,
-                    "AAAABg==", // scvI128
-                    `AAAAAQAAAAMK/wAAAAAAAAAB`, // amount
-                  ].join(""),
-                  "base64"
-                )
-              )
-            ),
-            auth: [],
-          })
-        )
-        .build();
-
-      // This is a simplified and potentially incorrect way to build the XDR.
-      // A real implementation should use a robust library or SDK function to build this.
-      // For now, we'll proceed with a placeholder to demonstrate the flow.
-      // A proper implementation would use `Soroban.parseTransaction` and `signTransaction` from `@stellar/freighter-api`.
-
+      // TODO: Build and sign Soroban deposit transaction using Contract SDK
+      // Placeholder: simulate success flow
       toast.dismiss();
-      toast.success("This is a simulated success! Transaction signing and submission would happen here.");
-      // In a real scenario:
-      // const signedTx = await signTransaction(tx.toXDR(), { networkPassphrase: NETWORK_PASSPHRASE });
-      // const result = await server.sendTransaction(signedTx);
-      // console.log(result);
-
-      // On success:
+      toast.success("Simulated deposit success! Real Soroban integration pending.");
       store.getState().reset();
       router.push("/dashboard");
-      toast.success("Deposit successful! Welcome to RemitMortgage.");
     } catch (e) {
       console.error(e);
       toast.dismiss();
-      toast.error("Deposit failed. Please check the console for details.");
+      toast.error("Deposit failed.");
     } finally {
       setIsLoading(false);
     }

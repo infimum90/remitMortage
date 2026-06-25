@@ -1,14 +1,16 @@
 "use client"
 
+export const dynamic = "force-dynamic";
+
 import React, { useEffect, useState } from "react";
-import dynamic from "next/dynamic";
+import loadDynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { useWallet } from "../../context/WalletContext";
+import { WalletProvider, useWallet } from "../../context/WalletContext";
 import SavingsProgressCard from "../../components/SavingsProgressCard";
 import LoanStatusCard from "../../components/LoanStatusCard";
 import DepositForm from "../../components/DepositForm";
 
-const Navbar = dynamic(() => import("../../components/Navbar"), { ssr: false });
+const Navbar = loadDynamic(() => import("../../components/Navbar"), { ssr: false });
 
 type BorrowerStatus = {
   address: string;
@@ -16,7 +18,7 @@ type BorrowerStatus = {
   loan: { status: string; principal: string; disbursed: string; repaid: string };
 };
 
-export default function DashboardPage() {
+function DashboardInner() {
   const router = useRouter();
   const { publicKey, isConnected } = useWallet();
   const [status, setStatus] = useState<BorrowerStatus | null>(null);
@@ -52,7 +54,6 @@ export default function DashboardPage() {
   return (
     <div>
       <Navbar />
-
       <main className="max-w-4xl mx-auto px-6 py-24">
         <h1 className="text-3xl font-bold mb-6">Borrower Dashboard</h1>
 
@@ -66,7 +67,6 @@ export default function DashboardPage() {
               target={status.escrow.target}
               progress={status.escrow.progress}
             />
-
             <div className="space-y-6">
               <LoanStatusCard loan={status.loan} />
               <DepositForm address={status.address} />
@@ -79,5 +79,13 @@ export default function DashboardPage() {
         )}
       </main>
     </div>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <WalletProvider>
+      <DashboardInner />
+    </WalletProvider>
   );
 }
