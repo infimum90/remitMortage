@@ -59,15 +59,13 @@ describe("Contractor Portal Tests", () => {
 
     // 1. Upload invalid type
     const invalidFile = new File(["dummy content"], "test.txt", { type: "text/plain" });
-    await userEvent.upload(fileInput!, invalidFile);
+    fireEvent.change(fileInput!, { target: { files: [invalidFile] } });
     expect(screen.getByText("Unsupported file type. Please upload JPG, PNG, WEBP, or MP4.")).toBeInTheDocument();
 
     // 2. Upload oversized file (>10MB)
-    const largeContent = new Array(11 * 1024 * 1024).fill("a").join("");
-    const largeFile = new File([largeContent], "large.jpg", { type: "image/jpeg" });
-    Object.defineProperty(largeFile, 'size', { value: 11 * 1024 * 1024 }); // Mock size explicitly
-    
-    await userEvent.upload(fileInput!, largeFile);
+    const largeFile = new File(["x"], "large.jpg", { type: "image/jpeg" });
+    Object.defineProperty(largeFile, 'size', { value: 11 * 1024 * 1024 });
+    fireEvent.change(fileInput!, { target: { files: [largeFile] } });
     expect(screen.getByText("File size exceeds 10MB limit.")).toBeInTheDocument();
   });
 
@@ -86,10 +84,10 @@ describe("Contractor Portal Tests", () => {
     render(<EvidenceUpload milestoneId="m1" onUploadSuccess={handleUploadSuccess} />);
 
     const fileInput = document.querySelector('input[type="file"]');
-    const validFile = new File(["image"], "test.png", { type: "image/png" });
     
     // Select valid file
-    await userEvent.upload(fileInput!, validFile);
+    const validFile = new File(["image"], "test.png", { type: "image/png" });
+    fireEvent.change(fileInput!, { target: { files: [validFile] } });
     
     // Preview should appear
     expect(screen.getByText("Preview:")).toBeInTheDocument();
@@ -108,7 +106,7 @@ describe("Contractor Portal Tests", () => {
 
     // Verify CID is displayed
     expect(screen.getByText("Upload Successful")).toBeInTheDocument();
-    expect(screen.getByText(\`CID: \${mockCid}\`)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "View on IPFS" })).toHaveAttribute("href", \`https://ipfs.io/ipfs/\${mockCid}\`);
+    expect(screen.getByText(`CID: ${mockCid}`)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "View on IPFS" })).toHaveAttribute("href", `https://ipfs.io/ipfs/${mockCid}`);
   });
 });

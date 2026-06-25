@@ -1,14 +1,21 @@
 "use client"
 
+export const dynamic = "force-dynamic";
+
 import React, { useEffect, useState } from "react";
-import dynamic from "next/dynamic";
+import loadDynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { useWallet } from "../../context/WalletContext";
+import { WalletProvider, useWallet } from "../../context/WalletContext";
 import SavingsProgressCard from "../../components/SavingsProgressCard";
 import LoanStatusCard from "../../components/LoanStatusCard";
 import DepositForm from "../../components/DepositForm";
+import {
+  consumeTxSuccessFeedback,
+  shortenAddress,
+  STELLARCHAIN_TX_BASE,
+} from "../../lib/transaction-status";
 
-const Navbar = dynamic(() => import("../../components/Navbar"), { ssr: false });
+const Navbar = loadDynamic(() => import("../../components/Navbar"), { ssr: false });
 
 type BorrowerStatus = {
   address: string;
@@ -16,12 +23,20 @@ type BorrowerStatus = {
   loan: { status: string; principal: string; disbursed: string; repaid: string };
 };
 
-export default function DashboardPage() {
+function DashboardInner() {
   const router = useRouter();
   const { publicKey, isConnected } = useWallet();
   const [status, setStatus] = useState<BorrowerStatus | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [txSuccess, setTxSuccess] = useState<{ hash: string; type: string } | null>(null);
+
+  useEffect(() => {
+    const feedback = consumeTxSuccessFeedback();
+    if (feedback) {
+      setTxSuccess(feedback);
+    }
+  }, []);
 
   useEffect(() => {
     if (!isConnected) {
@@ -52,9 +67,41 @@ export default function DashboardPage() {
   return (
     <div>
       <Navbar />
-
       <main className="max-w-4xl mx-auto px-6 py-24">
         <h1 className="text-3xl font-bold mb-6">Borrower Dashboard</h1>
+
+        {txSuccess && (
+          <div
+            role="status"
+            className="mb-6 p-4 rounded-lg border border-emerald-500/30 bg-emerald-500/10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+          >
+            <div>
+              <p className="text-sm font-semibold text-emerald-400">
+                {txSuccess.type} confirmed successfully
+              </p>
+              <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+                Transaction {shortenAddress(txSuccess.hash)} is on-chain.
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <a
+                href={`${STELLARCHAIN_TX_BASE}${txSuccess.hash}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-[var(--accent-primary-light)] hover:underline"
+              >
+                View on explorer
+              </a>
+              <button
+                type="button"
+                onClick={() => setTxSuccess(null)}
+                className="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
 
         {loading && <div className="p-6 bg-[var(--bg-card)] rounded-md">Loading...</div>}
         {error && <div className="p-6 bg-red-50 text-red-700 rounded-md">{error}</div>}
@@ -66,7 +113,6 @@ export default function DashboardPage() {
               target={status.escrow.target}
               progress={status.escrow.progress}
             />
-
             <div className="space-y-6">
               <LoanStatusCard loan={status.loan} />
               <DepositForm address={status.address} />
@@ -79,5 +125,13 @@ export default function DashboardPage() {
         )}
       </main>
     </div>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <WalletProvider>
+      <DashboardInner />
+    </WalletProvider>
   );
 }

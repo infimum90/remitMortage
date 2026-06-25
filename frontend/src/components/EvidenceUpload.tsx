@@ -85,7 +85,9 @@ export default function EvidenceUpload({ milestoneId, onUploadSuccess }: Evidenc
       
       {!cid ? (
         <div className="space-y-4">
-          <input 
+          <label htmlFor={`evidence-upload-${milestoneId}`} className="sr-only">Upload Evidence</label>
+          <input
+            id={`evidence-upload-${milestoneId}`}
             type="file" 
             ref={fileInputRef}
             onChange={handleFileChange} 
@@ -115,7 +117,7 @@ export default function EvidenceUpload({ milestoneId, onUploadSuccess }: Evidenc
           <button 
             onClick={handleUpload}
             disabled={!file || isUploading}
-            className={\`w-full py-2 rounded-md font-semibold transition-colors \${!file || isUploading ? 'bg-gray-700 text-gray-400 cursor-not-allowed' : 'bg-[var(--success)] text-white hover:bg-emerald-400'}\`}
+            className={`w-full py-2 rounded-md font-semibold transition-colors ${!file || isUploading ? 'bg-gray-700 text-gray-400 cursor-not-allowed' : 'bg-[var(--success)] text-white hover:bg-emerald-400'}`}
           >
             {isUploading ? "Uploading to IPFS..." : "Submit Evidence"}
           </button>
@@ -130,10 +132,10 @@ export default function EvidenceUpload({ milestoneId, onUploadSuccess }: Evidenc
           </div>
           <p className="text-sm font-semibold text-[var(--success)] mb-1">Upload Successful</p>
           <div className="text-xs text-[var(--text-muted)] w-full overflow-hidden text-ellipsis whitespace-nowrap text-center mb-2">
-            CID: {cid}
+            {`CID: ${cid}`}
           </div>
           <a 
-            href={\`https://ipfs.io/ipfs/\${cid}\`} 
+            href={`https://ipfs.io/ipfs/${cid}`} 
             target="_blank" 
             rel="noreferrer"
             className="text-xs text-[var(--accent-secondary)] hover:underline"

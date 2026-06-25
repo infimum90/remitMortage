@@ -4,7 +4,7 @@ on:
   push:
     branches: [ main ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, development ]
 
 jobs:
   # ── Smart Contracts CI ──────────────────────────────────────────────────
@@ -81,13 +81,64 @@ jobs:
         run: npm ci
         working-directory: frontend
 
+      - name: Run Frontend Tests
+        run: npm test -- --passWithNoTests --no-coverage
+        working-directory: frontend
+
       - name: Build Next.js Application
         run: npm run build
         working-directory: frontend
         env:
-          # Prevent build from failing due to missing env variables in CI
           NEXT_PUBLIC_ESCROW_CONTRACT_ID: CAWXDSZM52E5BW7G6TFX7DTXSHF7F75TUSSWW7B442NBEU3CADXNVTXH
           NEXT_PUBLIC_LENDING_POOL_CONTRACT_ID: CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA
           NEXT_PUBLIC_USDC_TOKEN_ID: CCERWUE35WN7M4PN6XYK7CDCJZX35TC53TFATJNBRA6I3FDS3RVS65YF
           NEXT_PUBLIC_NETWORK_PASSPHRASE: "Test SDF Network ; September 2015"
           NEXT_PUBLIC_HORIZON_URL: "https://horizon-testnet.stellar.org"
+
+  # ── Integration Tests ───────────────────────────────────────────────────
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: testuser
+          POSTGRES_PASSWORD: testpassword
+          POSTGRES_DB: testdb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      - name: Run Database Migrations
+        env:
+          DATABASE_URL: postgresql://testuser:testpassword@localhost:5432/testdb?schema=public
+        run: npx prisma migrate deploy
+
+      - name: Execute Integration Tests
+        env:
+          DATABASE_URL: postgresql://testuser:testpassword@localhost:5432/testdb?schema=public
+          HORIZON_URL: https://horizon.stellar.org
+          JWT_SECRET: testing-secret
+        run: npm run test:integration

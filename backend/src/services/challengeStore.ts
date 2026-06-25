@@ -1,3 +1,5 @@
+import { randomUUID } from "crypto";
+
 /** In-memory store for pending wallet-ownership challenges. */
 
 interface ChallengeEntry {
@@ -12,7 +14,7 @@ const store = new Map<string, ChallengeEntry>();
 const TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 export function createChallenge(walletAddress: string): string {
-  const nonce = crypto.randomUUID().replace(/-/g, "");
+  const nonce = randomUUID().replace(/-/g, "");
   const timestamp = Date.now();
   const challenge = `RemitMortgage-verify-${nonce}-${timestamp}`;
   store.set(walletAddress, { challenge, expiresAt: timestamp + TTL_MS, used: false });

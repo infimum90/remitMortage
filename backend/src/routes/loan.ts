@@ -9,6 +9,7 @@ import {
   updateApplication,
   escrowTargetMetForAmount,
 } from "../services/loanStore.js";
+import { queueNotification } from "../services/notification.js";
 
 export const loanRouter = Router();
 
@@ -79,6 +80,36 @@ loanRouter.post("/:id/approve", async (req, res) => {
     // After simulation, proceed to Disbursing
     const disbursing = updateApplication(id, { status: "Disbursing" });
 
+    // Trigger milestone approval notification!
+    const email = req.body.email || `${app.borrowerAddress}@example.com`;
+    const webhookUrl = req.body.webhookUrl || "https://partner-platform.com/webhooks";
+
+    if (approved) {
+      // 1. Email notification
+      await queueNotification(
+        email,
+        "EMAIL",
+        JSON.stringify({
+          template: "loan_status_update",
+          loanId: id,
+          status: "Approved"
+        })
+      );
+
+      // 2. Webhook notification
+      await queueNotification(
+        webhookUrl,
+        "WEBHOOK",
+        JSON.stringify({
+          event: "loan.milestone_approved",
+          loanId: id,
+          borrowerAddress: approved.borrowerAddress,
+          status: "Approved",
+          timestamp: Date.now()
+        })
+      );
+    }
+
     return res.json(disbursing);
   } catch (err) {
     console.error("Approve error:", err);
@@ -107,4 +138,53 @@ loanRouter.get("/:id", async (req, res) => {
   const app = getApplication(id);
   if (!app) return res.status(404).json({ error: "not_found" });
   return res.json(app);
+});
+
+// POST /api/loan/:id/trigger-payment-due
+// Simulates a payment due date checker trigger, queuing email and webhook alerts.
+loanRouter.post("/:id/trigger-payment-due", async (req, res) => {
+  const { id } = req.params;
+  const { email, webhookUrl, amount, dueDate } = req.body ?? {};
+
+  const app = getApplication(id);
+  if (!app) return res.status(404).json({ error: "not_found" });
+
+  const targetEmail = email || `${app.borrowerAddress}@example.com`;
+  const targetWebhookUrl = webhookUrl || "https://partner-platform.com/webhooks";
+  const targetAmount = amount || app.amount;
+  const targetDueDate = dueDate || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+  try {
+    const emailNotif = await queueNotification(
+      targetEmail,
+      "EMAIL",
+      JSON.stringify({
+        template: "repayment_reminder",
+        amount: targetAmount,
+        dueDate: targetDueDate
+      })
+    );
+
+    const webhookNotif = await queueNotification(
+      targetWebhookUrl,
+      "WEBHOOK",
+      JSON.stringify({
+        event: "loan.payment_due",
+        loanId: id,
+        borrowerAddress: app.borrowerAddress,
+        amount: targetAmount,
+        dueDate: targetDueDate,
+        timestamp: Date.now()
+      })
+    );
+
+    return res.json({
+      message: "Payment due notifications triggered and queued.",
+      emailNotificationId: emailNotif.id,
+      webhookNotificationId: webhookNotif.id
+    });
+  } catch (error: any) {
+    console.error("Trigger payment due error:", error);
+    return res.status(500).json({ error: "failed_to_trigger_notifications", message: error.message });
+  }
 });
