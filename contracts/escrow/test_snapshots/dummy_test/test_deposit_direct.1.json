@@ -1,6 +1,6 @@
 {
   "generators": {
-    "address": 6,
+    "address": 5,
     "nonce": 0
   },
   "auth": [
@@ -107,7 +107,7 @@
                 {
                   "i128": {
                     "hi": 0,
-                    "lo": 100000000000
+                    "lo": 20000000000
                   }
                 }
               ]
@@ -129,7 +129,7 @@
                     {
                       "i128": {
                         "hi": 0,
-                        "lo": 100000000000
+                        "lo": 20000000000
                       }
                     }
                   ]
@@ -140,12 +140,11 @@
           ]
         }
       ]
-    ],
-    []
+    ]
   ],
   "ledger": {
     "protocol_version": 22,
-    "sequence_number": 518400,
+    "sequence_number": 0,
     "timestamp": 0,
     "network_id": "0000000000000000000000000000000000000000000000000000000000000000",
     "base_reserve": 0,
@@ -357,7 +356,7 @@
                       "val": {
                         "i128": {
                           "hi": 0,
-                          "lo": 100000000000
+                          "lo": 20000000000
                         }
                       }
                     },
@@ -508,7 +507,7 @@
                         "val": {
                           "i128": {
                             "hi": 0,
-                            "lo": 100000000000
+                            "lo": 20000000000
                           }
                         }
                       }
@@ -566,7 +565,7 @@
                       "val": {
                         "i128": {
                           "hi": 0,
-                          "lo": 400000000000
+                          "lo": 480000000000
                         }
                       }
                     },
@@ -639,7 +638,7 @@
                       "val": {
                         "i128": {
                           "hi": 0,
-                          "lo": 100000000000
+                          "lo": 20000000000
                         }
                       }
                     },
@@ -803,5 +802,74 @@
       ]
     ]
   },
-  "events": []
+  "events": [
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "8011bbf4cdf04e5bc6ac886935b99aa4b2c0cabde133f9d7fb3e656799f0a896",
+        "type_": "contract",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "transfer"
+              },
+              {
+                "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+              },
+              {
+                "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
+              },
+              {
+                "string": "aaa:GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAJXFF"
+              }
+            ],
+            "data": {
+              "i128": {
+                "hi": 0,
+                "lo": 20000000000
+              }
+            }
+          }
+        }
+      },
+      "failed_call": false
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "0000000000000000000000000000000000000000000000000000000000000005",
+        "type_": "contract",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "deposit"
+              }
+            ],
+            "data": {
+              "vec": [
+                {
+                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                },
+                {
+                  "i128": {
+                    "hi": 0,
+                    "lo": 20000000000
+                  }
+                },
+                {
+                  "i128": {
+                    "hi": 0,
+                    "lo": 20000000000
+                  }
+                }
+              ]
+            }
+          }
+        }
+      },
+      "failed_call": false
+    }
+  ]
 }
