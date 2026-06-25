@@ -101,6 +101,27 @@ body {
   to { opacity: 1; transform: scale(1); }
 }
 
+@keyframes checkmark-draw {
+  from { stroke-dashoffset: 48; }
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes cross-pop {
+  0% { opacity: 0; transform: scale(0.4) rotate(-8deg); }
+  60% { transform: scale(1.08) rotate(2deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0deg); }
+}
+
+.tx-checkmark-path {
+  stroke-dasharray: 48;
+  stroke-dashoffset: 48;
+  animation: checkmark-draw 0.6s ease-out 0.2s forwards;
+}
+
+.tx-cross-animate {
+  animation: cross-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
 .animate-fade-in-up {
   animation: fadeInUp 0.8s ease-out both;
 }
