@@ -85,3 +85,35 @@ export async function pinJSONToIPFS(metadata: any): Promise<string> {
     throw new Error(`Failed to pin JSON to IPFS: ${error.response?.data?.error?.details || error.message}`);
   }
 }
+
+export interface UnpinResult {
+  status: number;
+  cid: string;
+}
+
+/**
+ * Unpins a file from Pinata IPFS by CID.
+ * @param cid The IPFS content identifier to unpin.
+ * @returns Pinata API response status and CID.
+ */
+export async function unpinFileFromIPFS(cid: string): Promise<UnpinResult> {
+  const url = `https://api.pinata.cloud/pinning/unpin/${encodeURIComponent(cid)}`;
+
+  if (!config.pinataApiKey || !config.pinataSecretApiKey) {
+    throw new Error("Pinata credentials are not configured in environment variables.");
+  }
+
+  try {
+    const response = await axios.delete(url, {
+      headers: {
+        pinata_api_key: config.pinataApiKey,
+        pinata_secret_api_key: config.pinataSecretApiKey,
+      },
+    });
+
+    return { status: response.status, cid };
+  } catch (error: any) {
+    console.error("[IPFSService] Error unpinning file from IPFS:", error.response?.data || error.message);
+    throw new Error(`Failed to unpin file from IPFS: ${error.response?.data?.error?.details || error.message}`);
+  }
+}

@@ -25,3 +25,13 @@ model Notification {
   lastError String?
   nextRetryAt DateTime?
 }
+
+model UnpinnedCid {
+  id           String   @id @default(uuid())
+  cid          String
+  proposalId     String?
+  success      Boolean
+  pinataStatus Int?
+  error        String?
+  createdAt    DateTime @default(now())
+}

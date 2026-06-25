@@ -1,6 +1,13 @@
 import { Router } from "express";
 import multer from "multer";
-import { pinFileToIPFS } from "../services/ipfs.js";
+import { pinFileToIPFS, unpinFileFromIPFS } from "../services/ipfs.js";
+import { logUnpinnedCid } from "../services/ipfsAudit.js";
+import { unpinEvidenceCid } from "../services/ipfsCleanup.js";
+import {
+  createProposal,
+  getProposal,
+  updateProposal,
+} from "../services/milestoneProposalStore.js";
 
 export const milestoneRouter = Router();
 
@@ -110,4 +117,115 @@ milestoneRouter.post("/upload", (req, res, next) => {
       message: error.message || "Failed to upload and pin file to IPFS.",
     });
   }
+});
+
+/**
+ * @openapi
+ * /api/milestone/unpin/{cid}:
+ *   delete:
+ *     summary: Unpin milestone evidence from Pinata IPFS
+ *     description: Removes a pinned file from Pinata storage by CID and records the action in the audit log.
+ *     tags:
+ *       - Milestone
+ *     parameters:
+ *       - in: path
+ *         name: cid
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: File unpinned successfully.
+ *       500:
+ *         description: Unpin operation failed.
+ */
+milestoneRouter.delete("/unpin/:cid", async (req, res) => {
+  const { cid } = req.params;
+
+  if (!cid) {
+    return res.status(400).json({ error: "missing_cid", message: "CID is required." });
+  }
+
+  try {
+    const result = await unpinFileFromIPFS(cid);
+    await logUnpinnedCid({
+      cid,
+      success: true,
+      pinataStatus: result.status,
+    });
+    return res.json({ cid: result.cid, status: result.status });
+  } catch (error: any) {
+    console.warn("[MilestoneUnpin] Error unpinning CID:", error.message);
+    await logUnpinnedCid({
+      cid,
+      success: false,
+      error: error.message,
+    }).catch((auditError) => {
+      console.warn("[MilestoneUnpin] Failed to write audit log:", auditError);
+    });
+    return res.status(500).json({
+      error: "ipfs_unpin_failed",
+      message: error.message || "Failed to unpin file from IPFS.",
+    });
+  }
+});
+
+/**
+ * @openapi
+ * /api/milestone/proposals:
+ *   post:
+ *     summary: Register a milestone proposal with evidence CID
+ *     tags:
+ *       - Milestone
+ */
+milestoneRouter.post("/proposals", async (req, res) => {
+  const { milestoneId, evidenceCid } = req.body ?? {};
+
+  if (!milestoneId || !evidenceCid) {
+    return res.status(400).json({
+      error: "missing_fields",
+      message: "milestoneId and evidenceCid are required.",
+    });
+  }
+
+  const proposal = createProposal(String(milestoneId), String(evidenceCid));
+  return res.status(201).json(proposal);
+});
+
+/**
+ * @openapi
+ * /api/milestone/proposals/{id}/reject:
+ *   post:
+ *     summary: Reject a milestone proposal and unpin its evidence from IPFS
+ *     tags:
+ *       - Milestone
+ */
+milestoneRouter.post("/proposals/:id/reject", async (req, res) => {
+  const { id } = req.params;
+  const { reason } = req.body ?? {};
+  const proposal = getProposal(id);
+
+  if (!proposal) {
+    return res.status(404).json({ error: "not_found", message: "Proposal not found." });
+  }
+
+  if (proposal.status !== "Open") {
+    return res.status(400).json({
+      error: "invalid_state",
+      message: "Proposal must be Open to reject.",
+    });
+  }
+
+  const updated = updateProposal(id, {
+    status: "Rejected",
+    reason: reason ?? "Rejected by governance multisig",
+  });
+
+  if (proposal.evidenceCid) {
+    unpinEvidenceCid(proposal.evidenceCid, id).catch((err) => {
+      console.warn(`[MilestoneReject] Background unpin failed for proposal ${id}:`, err);
+    });
+  }
+
+  return res.json(updated);
 });

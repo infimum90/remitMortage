@@ -18,7 +18,7 @@
     "express": "^5.1.0",
     "express-rate-limit": "^6.10.0",
     "multer": "^1.4.5-lts.1",
-    "pdfkit": "^0.19.1"
+    "pdfkit": "^0.19.1",
     "swagger-ui-express": "^4.6.3",
     "swagger-jsdoc": "^6.2.8"
   },
