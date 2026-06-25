@@ -75,6 +75,15 @@
                 },
                 {
                   "u32": 500
+                },
+                {
+                  "u32": 300
+                },
+                {
+                  "u32": 150
+                },
+                {
+                  "u32": 50
                 }
               ]
             }
@@ -480,7 +489,15 @@
                             },
                             {
                               "key": {
-                                "symbol": "early_withdrawal_penalty_bps"
+                                "symbol": "max_duration_ledgers"
+                              },
+                              "val": {
+                                "u32": 518400
+                              }
+                            },
+                            {
+                              "key": {
+                                "symbol": "penalty_bps_tier1"
                               },
                               "val": {
                                 "u32": 500
@@ -488,10 +505,26 @@
                             },
                             {
                               "key": {
-                                "symbol": "max_duration_ledgers"
+                                "symbol": "penalty_bps_tier2"
                               },
                               "val": {
-                                "u32": 518400
+                                "u32": 300
+                              }
+                            },
+                            {
+                              "key": {
+                                "symbol": "penalty_bps_tier3"
+                              },
+                              "val": {
+                                "u32": 150
+                              }
+                            },
+                            {
+                              "key": {
+                                "symbol": "penalty_bps_tier4"
+                              },
+                              "val": {
+                                "u32": 50
                               }
                             },
                             {

@@ -1,5 +1,19 @@
 use soroban_sdk::{contracttype, Address, BytesN};
 
+/// Tranche types for risk stratification of investor deposits.
+///
+/// Senior tranche offers a lower, fixed yield rate but is protected from losses.
+/// Junior tranche absorbs first losses in exchange for higher, variable yield.
+#[contracttype]
+#[derive(Clone, Debug, PartialEq)]
+#[repr(u32)]
+pub enum Tranche {
+    /// Lower fixed yield, protected from losses until junior is exhausted.
+    Senior = 0,
+    /// Higher variable yield, absorbs losses before senior tranche.
+    Junior = 1,
+}
+
 /// Pool configuration set during initialization.
 #[contracttype]
 #[derive(Clone, Debug, PartialEq)]
@@ -10,6 +24,8 @@ pub struct PoolConfig {
     pub token: Address,
     /// Annual interest rate in basis points (e.g. 800 = 8%).
     pub interest_rate_bps: u32,
+    /// Fixed yield rate allocated to senior tranche in basis points (e.g. 400 = 4%).
+    pub senior_rate_bps: u32,
 }
 
 /// Tracks an individual investor's capital contribution.
@@ -22,6 +38,24 @@ pub struct InvestorRecord {
     pub claimed_yield: i128,
     /// Ledger when first deposit was made.
     pub start_ledger: u32,
+    /// The tranche this investor deposited into.
+    pub tranche: Tranche,
+    /// Accumulated yield credited to this investor (not yet withdrawn).
+    pub accrued_yield: i128,
+    /// Total losses absorbed by this investor (only non-zero for junior tranche).
+    pub absorbed_loss: i128,
+}
+
+/// Per-tranche aggregate metrics stored in instance storage.
+#[contracttype]
+#[derive(Clone, Debug, PartialEq)]
+pub struct TrancheInfo {
+    /// Total capital deposited into this tranche.
+    pub total_deposited: i128,
+    /// Total yield distributed to this tranche so far.
+    pub total_yield_distributed: i128,
+    /// Total losses absorbed by this tranche so far.
+    pub total_loss_absorbed: i128,
 }
 
 /// Loan status lifecycle.
@@ -37,8 +71,27 @@ pub enum LoanStatus {
     Repaid = 2,
     /// Loan was rejected or cancelled.
     Cancelled = 3,
+    /// Loan defaulted — losses are distributed via the waterfall.
+    /// Loan has defaulted after missed payments.
+    Defaulted = 4,
 }
-
+ 
+/// Repayment schedule for a loan, tracked on-chain.
+#[contracttype]
+#[derive(Clone, Debug, PartialEq)]
+pub struct RepaymentSchedule {
+    /// Monthly installment amount (principal + interest portion for the term).
+    pub monthly_amount: i128,
+    /// Duration of the schedule in months.
+    pub duration_months: u32,
+    /// Ledger sequence when the next installment is due.
+    pub next_due_ledger: u32,
+    /// Count of installments paid on-time.
+    pub payments_made: u32,
+    /// Count of installments missed (consecutive misses are used for default detection).
+    pub payments_missed: u32,
+}
+ 
 /// A loan record for a borrower.
 #[contracttype]
 #[derive(Clone, Debug, PartialEq)]
@@ -57,6 +110,7 @@ pub struct LoanRecord {
     pub status: LoanStatus,
     /// Ledger when the loan was created.
     pub created_ledger: u32,
+    // schedule moved to separate storage key (LoanSchedule) to avoid optional contracttype encoding issues
 }
 
 /// Storage keys for the lending pool contract.
@@ -71,8 +125,14 @@ pub enum DataKey {
     TotalLiquidity,
     /// Loan record keyed by a unique loan ID (hash).
     Loan(BytesN<32>),
+    /// Repayment schedule keyed by loan ID.
+    LoanSchedule(BytesN<32>),
     /// Total number of active loans (for tracking).
     LoanCount,
+    /// Aggregate info for the senior tranche.
+    SeniorTranche,
+    /// Aggregate info for the junior tranche.
+    JuniorTranche,
     /// Total interest repaid to the pool.
     TotalRepaidInterest,
     /// Sum of all principal - disbursed for Approved loans.

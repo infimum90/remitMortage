@@ -87,5 +87,15 @@ RemitMortgage coordinates the entire homeownership journey on-chain through five
 *   [Architecture](ARCHITECTURE.md): Core principle of separating verification from settlement, contract suite design, and end-to-end flow.
 *   [Contributing Guide](CONTRIBUTING.md): How to set up locally, branch conventions, commit standards, and PR guidelines.
 
+## Testing on Testnet
+
+Comprehensive testnet instructions are available in the docs folder:
+
+- docs/DEPLOYMENT.md — deployment steps, building WASM, and initializing contracts.
+- docs/TESTNET_SETUP.md — Friendbot, Freighter, and minting/testing USDC tips.
+- docs/E2E_TESTING.md — end-to-end borrower walkthrough with example CLI commands.
+
+Refer to those guides to deploy contracts, fund wallets, and exercise the full borrower lifecycle on Stellar testnet.
+
 ## License
 MIT
