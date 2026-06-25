@@ -33,6 +33,8 @@ RemitMortgage makes remittance history count:
 
 ## Running it locally
 
+For local offline testing, you can spin up a local mock Stellar network (including Horizon, Soroban RPC, and Friendbot) in a Docker container using Docker Compose. Refer to the [Stellar Quickstart Docker Sandbox Guide](docs/LOCAL_SANDBOX.md) for detailed instructions on setting up and deploying contracts locally.
+
 ### Prerequisites
 *   Node.js ≥ 18.0.0
 *   Rust (latest stable) + `wasm32-unknown-unknown` target
@@ -85,6 +87,7 @@ RemitMortgage coordinates the entire homeownership journey on-chain through five
 
 ## Documentation
 *   [Architecture](ARCHITECTURE.md): Core principle of separating verification from settlement, contract suite design, and end-to-end flow.
+*   [Stellar Quickstart Docker Sandbox Guide](docs/LOCAL_SANDBOX.md): Instructions to spin up a local mock network and deploy contracts offline.
 *   [Contributing Guide](CONTRIBUTING.md): How to set up locally, branch conventions, commit standards, and PR guidelines.
 
 ## Testing on Testnet

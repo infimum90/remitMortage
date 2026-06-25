@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  stellar-quickstart:
+    image: stellar/quickstart:latest
+    container_name: stellar-quickstart
+    ports:
+      - "8000:8000"
+    # Command arguments for running a standalone local network.
+    # --local mode runs Horizon, Soroban RPC, Friendbot, and Core in local network mode.
+    # --enable-soroban-rpc starts the Soroban RPC server inside the container.
+    command: >
+      /start --local --enable-soroban-rpc
+    environment:
+      - NETWORK=local
+    volumes:
+      - stellar-data:/opt/stellar
+    restart: unless-stopped
+
+volumes:
+  stellar-data:
