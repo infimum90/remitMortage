@@ -36,4 +36,7 @@ pub enum PoolError {
     ContractPaused = 13,
     /// Proposed new admin is not the caller or no transfer is pending.
     NotPendingAdmin = 14,
+    /// Borrower has no valid, non-expired verification record in the
+    /// configured VerificationRegistry, so the loan request is rejected.
+    ApplicantNotVerified = 17,
 }

@@ -6,6 +6,7 @@ mod types;
 pub use crate::errors::PoolError;
 pub use crate::types::{DataKey, InvestorRecord, LoanRecord, LoanStatus, PendingUpgradeRecord, PoolConfig, RepaymentSchedule, Tranche, TrancheInfo};
 use soroban_sdk::{contract, contractimpl, symbol_short, Symbol, token, Address, BytesN, Env};
+use verification_registry::VerificationRegistryContractClient;
 
 const INSTANCE_BUMP_AMOUNT: u32 = 518_400; // ~30 days
 const INSTANCE_LIFETIME_THRESHOLD: u32 = 129_600; // ~7.5 days
@@ -138,6 +139,14 @@ impl LendingPoolContract {
             .persistent()
             .get(&DataKey::Loan(loan_id.clone()))
             .ok_or(PoolError::LoanNotFound)
+    }
+
+    /// Returns the configured VerificationRegistry address, if one has been set.
+    ///
+    /// `None` means no registry has been configured yet, in which case the
+    /// verification gate in `do_request_loan` is skipped (opt-in gating).
+    fn read_verification_registry(env: &Env) -> Option<Address> {
+        env.storage().instance().get(&DataKey::VerificationRegistry)
     }
 
     fn set_loan(env: &Env, loan_id: &BytesN<32>, record: &LoanRecord) {
@@ -407,6 +416,16 @@ impl LendingPoolContract {
     ) -> Result<(), PoolError> {
         if principal <= 0 {
             return Err(PoolError::InvalidAmount);
+        }
+
+        // Verification gate: if a VerificationRegistry has been configured,
+        // the borrower must have a valid, non-expired verification record
+        // before they can request a loan against pool liquidity.
+        if let Some(registry) = Self::read_verification_registry(env) {
+            let registry_client = VerificationRegistryContractClient::new(env, &registry);
+            if !registry_client.is_verified(&borrower) {
+                return Err(PoolError::ApplicantNotVerified);
+            }
         }
 
         // Ensure loan ID doesn't already exist.
@@ -1161,6 +1180,39 @@ impl LendingPoolContract {
         Ok(())
     }
 
+    // ── Verification Registry ────────────────────────────────────────────
+
+    /// Set (or update) the VerificationRegistry contract address used to
+    /// gate `request_loan`. Admin-only.
+    ///
+    /// Once set, `request_loan` and `request_loan_with_origin` will reject
+    /// borrowers who do not have a valid, non-expired verification record
+    /// in the registry with `PoolError::ApplicantNotVerified`.
+    pub fn set_verification_registry(env: Env, registry: Address) -> Result<(), PoolError> {
+        let config = Self::read_config(&env)?;
+        config.admin.require_auth();
+
+        env.storage()
+            .instance()
+            .set(&DataKey::VerificationRegistry, &registry);
+        env.storage()
+            .instance()
+            .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
+
+        env.events().publish(
+            (symbol_short!("set_vreg"),),
+            (registry,),
+        );
+
+        Ok(())
+    }
+
+    /// Returns the configured VerificationRegistry address, or `None` if
+    /// the verification gate has not been enabled.
+    pub fn get_verification_registry(env: Env) -> Option<Address> {
+        Self::read_verification_registry(&env)
+    }
+
     // ── Upgrade Functions ────────────────────────────────────────────────
 
     /// Set the number of ledgers that must elapse between proposing and
@@ -1481,6 +1533,171 @@ mod test {
         // Same loan ID should fail.
         let result = client.try_request_loan(&borrower, &loan_id, &10_000_0000000i128);
         assert!(result.is_err());
+    }
+
+    // ── Verification Registry Gate ───────────────────────────────────────
+
+    /// Helper: deploy and initialize a VerificationRegistryContract.
+    fn setup_registry(
+        env: &Env,
+        admin: &Address,
+    ) -> verification_registry::VerificationRegistryContractClient<'_> {
+        let registry_id = env.register(verification_registry::VerificationRegistryContract, ());
+        let registry = verification_registry::VerificationRegistryContractClient::new(env, &registry_id);
+        registry.initialize(admin);
+        registry
+    }
+
+    #[test]
+    fn test_request_loan_succeeds_without_registry_configured() {
+        // Backward-compatible default: if no registry has ever been set,
+        // the gate is skipped entirely and loans behave as before.
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let (_admin, investor, _treasury, _token_address, client) = setup_pool(&env);
+        let borrower = Address::generate(&env);
+        let loan_id = mock_loan_id(&env);
+
+        client.deposit(&investor, &70_000_0000000i128, &Tranche::Senior);
+
+        let result = client.try_request_loan(&borrower, &loan_id, &10_000_0000000i128);
+        assert!(result.is_ok());
+        assert_eq!(client.get_verification_registry(), None);
+    }
+
+    #[test]
+    fn test_admin_can_set_verification_registry() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let (admin, _investor, _treasury, _token_address, client) = setup_pool(&env);
+        let registry = setup_registry(&env, &admin);
+
+        client.set_verification_registry(&registry.address);
+        assert_eq!(client.get_verification_registry(), Some(registry.address));
+    }
+
+    #[test]
+    fn test_non_admin_cannot_set_verification_registry() {
+        use soroban_sdk::testutils::{MockAuth, MockAuthInvoke};
+        use soroban_sdk::IntoVal;
+
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let (_admin, _investor, _treasury, _token_address, client) = setup_pool(&env);
+        let registry_admin = Address::generate(&env);
+        let registry = setup_registry(&env, &registry_admin);
+        let non_admin = Address::generate(&env);
+
+        // Only the non-admin signs; the contract requires `config.admin`'s
+        // authorization, so the call must fail.
+        env.mock_auths(&[MockAuth {
+            address: &non_admin,
+            invoke: &MockAuthInvoke {
+                contract: &client.address,
+                fn_name: "set_verification_registry",
+                args: (registry.address.clone(),).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        let result = client.try_set_verification_registry(&registry.address);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_request_loan_rejects_unverified_borrower() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let (admin, investor, _treasury, _token_address, client) = setup_pool(&env);
+        let registry = setup_registry(&env, &admin);
+        client.set_verification_registry(&registry.address);
+
+        let borrower = Address::generate(&env);
+        let loan_id = mock_loan_id(&env);
+
+        client.deposit(&investor, &70_000_0000000i128, &Tranche::Senior);
+
+        // Borrower has no record in the registry at all.
+        let result = client.try_request_loan(&borrower, &loan_id, &10_000_0000000i128);
+        assert_eq!(result.unwrap_err(), Ok(PoolError::ApplicantNotVerified));
+    }
+
+    #[test]
+    fn test_request_loan_succeeds_for_verified_borrower() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let (admin, investor, _treasury, _token_address, client) = setup_pool(&env);
+        let registry = setup_registry(&env, &admin);
+        client.set_verification_registry(&registry.address);
+
+        let borrower = Address::generate(&env);
+        let loan_id = mock_loan_id(&env);
+        let report_hash = BytesN::from_array(&env, &[9u8; 32]);
+
+        registry.register_verification(&borrower, &report_hash, &1_000u32);
+
+        client.deposit(&investor, &70_000_0000000i128, &Tranche::Senior);
+
+        let result = client.try_request_loan(&borrower, &loan_id, &10_000_0000000i128);
+        assert!(result.is_ok());
+
+        let loan = client.get_loan_info(&loan_id);
+        assert_eq!(loan.status, LoanStatus::Requested);
+    }
+
+    #[test]
+    fn test_request_loan_rejects_borrower_with_expired_verification() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let (admin, investor, _treasury, _token_address, client) = setup_pool(&env);
+        let registry = setup_registry(&env, &admin);
+        client.set_verification_registry(&registry.address);
+
+        let borrower = Address::generate(&env);
+        let loan_id = mock_loan_id(&env);
+        let report_hash = BytesN::from_array(&env, &[4u8; 32]);
+
+        // Verification expires after 50 ledgers.
+        registry.register_verification(&borrower, &report_hash, &50u32);
+
+        // Advance the ledger well past expiration.
+        env.ledger().with_mut(|li| li.sequence_number += 1_000);
+
+        client.deposit(&investor, &70_000_0000000i128, &Tranche::Senior);
+
+        let result = client.try_request_loan(&borrower, &loan_id, &10_000_0000000i128);
+        assert_eq!(result.unwrap_err(), Ok(PoolError::ApplicantNotVerified));
+    }
+
+    #[test]
+    fn test_request_loan_with_origin_also_gated() {
+        // The escrow bridge entry point shares the same gate, so a borrower
+        // cannot bypass verification by routing through the escrow path.
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let (admin, investor, _treasury, _token_address, client) = setup_pool(&env);
+        let registry = setup_registry(&env, &admin);
+        client.set_verification_registry(&registry.address);
+
+        let borrower = Address::generate(&env);
+        let loan_id = mock_loan_id(&env);
+        let escrow_origin = Address::generate(&env);
+
+        client.deposit(&investor, &70_000_0000000i128, &Tranche::Senior);
+
+        let result = client.try_request_loan_with_origin(
+            &borrower,
+            &loan_id,
+            &10_000_0000000i128,
+            &escrow_origin,
+        );
+        assert_eq!(result.unwrap_err(), Ok(PoolError::ApplicantNotVerified));
     }
 
     #[test]

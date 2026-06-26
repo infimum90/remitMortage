@@ -9,6 +9,7 @@ doctest = false
 
 [dependencies]
 soroban-sdk = { workspace = true }
+verification-registry = { path = "../verification-registry" }
 
 [dev-dependencies]
 soroban-sdk = { workspace = true, features = ["testutils"] }
