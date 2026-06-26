@@ -4,6 +4,7 @@ export interface Config {
   port: number;
   stellarNetwork: "testnet" | "mainnet";
   horizonUrl: string;
+  sorobanRpcUrl: string;
   escrowContractId: string;
   lendingPoolContractId: string;
   usdcTokenId: string;
@@ -24,6 +25,8 @@ export function loadConfig(): Config {
     stellarNetwork: (process.env.STELLAR_NETWORK as "testnet" | "mainnet") || "testnet",
     horizonUrl:
       process.env.HORIZON_URL || "https://horizon-testnet.stellar.org",
+    sorobanRpcUrl:
+      process.env.SOROBAN_RPC_URL || "https://soroban-testnet.stellar.org",
     escrowContractId: process.env.ESCROW_CONTRACT_ID || "",
     lendingPoolContractId: process.env.LENDING_POOL_CONTRACT_ID || "",
     usdcTokenId: process.env.USDC_TOKEN_ID || "",
