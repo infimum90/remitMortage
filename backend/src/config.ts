@@ -1,8 +1,18 @@
 /** Environment configuration with validation. */
 
+export type StellarNetwork = "testnet" | "mainnet" | "futurenet" | "standalone";
+
+const NETWORK_PASSPHRASE_DEFAULTS: Record<StellarNetwork, string> = {
+  testnet: "Test SDF Network ; September 2015",
+  mainnet: "Public Global Stellar Network ; September 2015",
+  futurenet: "Test SDF Future Network ; October 2022",
+  standalone: "Standalone Network ; February 2017",
+};
+
 export interface Config {
   port: number;
-  stellarNetwork: "testnet" | "mainnet";
+  stellarNetwork: StellarNetwork;
+  networkPassphrase: string;
   horizonUrl: string;
   sorobanRpcUrl: string;
   escrowContractId: string;
@@ -22,7 +32,12 @@ export interface Config {
 export function loadConfig(): Config {
   return {
     port: parseInt(process.env.PORT || "4000", 10),
-    stellarNetwork: (process.env.STELLAR_NETWORK as "testnet" | "mainnet") || "testnet",
+    stellarNetwork: (process.env.STELLAR_NETWORK as StellarNetwork) || "testnet",
+    networkPassphrase:
+      process.env.STELLAR_NETWORK_PASSPHRASE ||
+      NETWORK_PASSPHRASE_DEFAULTS[
+        (process.env.STELLAR_NETWORK as StellarNetwork) || "testnet"
+      ],
     horizonUrl:
       process.env.HORIZON_URL || "https://horizon-testnet.stellar.org",
     sorobanRpcUrl:
