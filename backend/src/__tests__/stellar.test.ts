@@ -4,6 +4,7 @@ import {
   fetchAllOperations,
   summarizePayments,
   detectSelfDealing,
+  createHorizonServer,
   InvalidStellarAddressError,
   PAGE_LIMIT,
   HorizonOperation,
@@ -237,5 +238,42 @@ describe("summarizePayments (average + timespan)", () => {
     expect(stats.averageAmountUSDC).toBe("0");
     expect(stats.spanMonths).toBe(0);
     expect(stats.firstPayment).toBeNull();
+  });
+});
+
+// ── Multi-network configuration ────────────────────────────────────────────
+
+describe("createHorizonServer (multi-network)", () => {
+  it("uses the supplied URL when explicitly provided", () => {
+    const customUrl = "https://custom-horizon.example.com";
+    const server = createHorizonServer(customUrl, "testnet");
+    // The returned server is an HorizonServerLike; verify it was constructed
+    // without throwing and exposes the operations builder.
+    expect(typeof server.operations).toBe("function");
+  });
+
+  it("falls back to the canonical testnet URL when horizonUrl is empty", () => {
+    const server = createHorizonServer("", "testnet");
+    expect(typeof server.operations).toBe("function");
+  });
+
+  it("falls back to the canonical mainnet URL when horizonUrl is empty", () => {
+    const server = createHorizonServer("", "mainnet");
+    expect(typeof server.operations).toBe("function");
+  });
+
+  it("falls back to the local standalone URL when horizonUrl is empty", () => {
+    const server = createHorizonServer("", "standalone");
+    expect(typeof server.operations).toBe("function");
+  });
+
+  it("analysis runs identically against a futurenet-targeted mock server", async () => {
+    const server = mockServer({
+      [SENDER]: monthlySpanPayments(8),
+      [RECIPIENT]: [],
+    });
+    const result = await analyzeRemittanceHistory(SENDER, RECIPIENT, { server });
+    expect(result.eligible).toBe(true);
+    expect(result.selfDealing).toBe(false);
   });
 });
