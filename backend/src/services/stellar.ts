@@ -1,10 +1,30 @@
 import { Horizon, StrKey } from "@stellar/stellar-sdk";
-import { loadConfig } from "../config.js";
-
-const config = loadConfig();
+import { loadConfig, type StellarNetwork } from "../config.js";
 
 /** Horizon caps a single operations page at 200 records. */
 export const PAGE_LIMIT = 200;
+
+const HORIZON_URL_DEFAULTS: Record<StellarNetwork, string> = {
+  testnet: "https://horizon-testnet.stellar.org",
+  mainnet: "https://horizon.stellar.org",
+  futurenet: "https://horizon-futurenet.stellar.org",
+  standalone: "http://localhost:8000",
+};
+
+/**
+ * Creates a Horizon server instance for the given URL, falling back to the
+ * canonical URL for the supplied network when `horizonUrl` is empty.
+ */
+export function createHorizonServer(
+  horizonUrl: string,
+  network: StellarNetwork = "testnet"
+): HorizonServerLike {
+  const url = horizonUrl || HORIZON_URL_DEFAULTS[network];
+  return new Horizon.Server(url) as unknown as HorizonServerLike;
+}
+
+const _config = loadConfig();
+const defaultServer = createHorizonServer(_config.horizonUrl, _config.stellarNetwork);
 
 /**
  * Minimal structural view of the Horizon objects this service depends on,
