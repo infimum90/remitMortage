@@ -1,6 +1,8 @@
 import { Request, Response, NextFunction } from "express";
 import { StrKey } from "@stellar/stellar-sdk";
 
+export type Network = "stellar" | "ethereum" | "solana";
+
 function isValidGAddress(addr: unknown): boolean {
   if (typeof addr !== "string") return false;
   if (addr.length !== 56) return false;
@@ -56,6 +58,54 @@ export function validateBorrowerParams(req: Request, res: Response, next: NextFu
 
   if (!isValidGAddress(address)) {
     return res.status(400).json({ error: "invalid_address", field: "address", message: "Invalid Stellar G-address" });
+  }
+
+  return next();
+}
+
+function isValidEvmAddress(addr: unknown): boolean {
+  if (typeof addr !== "string") return false;
+  return /^0x[0-9a-fA-F]{40}$/.test(addr);
+}
+
+// Base58 character set; Solana public keys decode to exactly 32 bytes (43-44 chars).
+function isValidSolanaAddress(addr: unknown): boolean {
+  if (typeof addr !== "string") return false;
+  if (addr.length < 32 || addr.length > 44) return false;
+  return /^[1-9A-HJ-NP-Za-km-z]+$/.test(addr);
+}
+
+function isValidAddressForNetwork(addr: unknown, network: Network): boolean {
+  switch (network) {
+    case "stellar":
+      return isValidGAddress(addr);
+    case "ethereum":
+      return isValidEvmAddress(addr);
+    case "solana":
+      return isValidSolanaAddress(addr);
+  }
+}
+
+const VALID_NETWORKS: Network[] = ["stellar", "ethereum", "solana"];
+
+/**
+ * Validates `walletAddress` and `network` for multi-chain ownership endpoints.
+ * The existing Stellar-only `validateWalletAddress` is kept for backward compat.
+ */
+export function validateMultiChainOwnership(req: Request, res: Response, next: NextFunction) {
+  const { walletAddress, network } = req.body ?? {};
+
+  if (!walletAddress) {
+    return res.status(400).json({ error: "missing_field", field: "walletAddress", message: "walletAddress is required" });
+  }
+  if (!network) {
+    return res.status(400).json({ error: "missing_field", field: "network", message: "network is required (stellar | ethereum | solana)" });
+  }
+  if (!VALID_NETWORKS.includes(network as Network)) {
+    return res.status(400).json({ error: "invalid_network", message: "network must be one of: stellar, ethereum, solana" });
+  }
+  if (!isValidAddressForNetwork(walletAddress, network as Network)) {
+    return res.status(400).json({ error: "invalid_address", field: "walletAddress", message: `Invalid ${network} address` });
   }
 
   return next();

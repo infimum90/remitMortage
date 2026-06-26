@@ -84,6 +84,12 @@
                 },
                 {
                   "u32": 50
+                },
+                {
+                  "u32": 10
+                },
+                {
+                  "u32": 1000
                 }
               ]
             }
@@ -446,6 +452,14 @@
                     },
                     {
                       "key": {
+                        "symbol": "last_contribution_ledger"
+                      },
+                      "val": {
+                        "u32": 0
+                      }
+                    },
+                    {
+                      "key": {
                         "symbol": "released"
                       },
                       "val": {
@@ -516,6 +530,22 @@
                               },
                               "val": {
                                 "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM"
+                              }
+                            },
+                            {
+                              "key": {
+                                "symbol": "default_penalty_bps"
+                              },
+                              "val": {
+                                "u32": 1000
+                              }
+                            },
+                            {
+                              "key": {
+                                "symbol": "grace_period_ledgers"
+                              },
+                              "val": {
+                                "u32": 10
                               }
                             },
                             {
@@ -593,6 +623,18 @@
                             "hi": 0,
                             "lo": 50000000000
                           }
+                        }
+                      },
+                      {
+                        "key": {
+                          "vec": [
+                            {
+                              "symbol": "Version"
+                            }
+                          ]
+                        },
+                        "val": {
+                          "u32": 1
                         }
                       }
                     ]

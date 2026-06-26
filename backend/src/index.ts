@@ -8,14 +8,32 @@ import { healthRouter } from "./routes/health.js";
 import { verificationRouter } from "./routes/verification.js";
 import { borrowerRouter } from "./routes/borrower.js";
 import { loanRouter } from "./routes/loan.js";
+import { milestoneRouter } from "./routes/milestone.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { startEventListener } from "./services/eventListener.js";
+import { startNotificationScheduler } from "./services/notification.js";
+import { loadConfig } from "./config.js";
 
 const app = express();
-const PORT = process.env.PORT || 4000;
+const config = loadConfig();
+const PORT = config.port;
 
 // ── Middleware ───────────────────────────────────────────────────────────
-app.use(cors());
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps, curl, Postman)
+    if (!origin) {
+      return callback(null, true);
+    }
+    
+    if (config.allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
+  credentials: true,
+}));
 app.use(express.json());
 
 // Basic rate limiter for verification endpoints: 100 requests per minute per IP
@@ -34,6 +52,7 @@ app.use("/api/health", healthRouter);
 app.use("/api/verification", verificationLimiter, verificationRouter);
 app.use("/api/borrower", borrowerRouter);
 app.use("/api/loan", loanRouter);
+app.use("/api/milestone", milestoneRouter);
 app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 // Global error handler (must be after routes)
@@ -47,6 +66,7 @@ app.listen(PORT, () => {
   // runs in the background and self-heals via exponential backoff, so a failing
   // RPC node never takes down the API process.
   startEventListener();
+  startNotificationScheduler();
 });
 
 export default app;

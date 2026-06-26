@@ -1,12 +1,7 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { WalletProvider } from "../context/WalletContext";
 import "./globals.css";
-
-const inter = Inter({
-  variable: "--font-inter",
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700", "800"],
-});
+import { ThemeProvider } from "@/context/ThemeContext";
 
 export const metadata: Metadata = {
   title: "RemitMortgage — Remittance-Backed Property Financing on Stellar",
@@ -30,9 +25,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${inter.variable} dark`}>
+    <html lang="en" className={`${inter.variable}`}>
       <body className="min-h-screen bg-[var(--bg-primary)] text-[var(--text-primary)] font-[var(--font-inter)] antialiased">
-        {children}
+        <ThemeProvider>{children}</ThemeProvider>
+        <WalletProvider>
+          {children}
+        </WalletProvider>
       </body>
     </html>
   );

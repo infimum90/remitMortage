@@ -2,11 +2,24 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { getOnboardingStore, useOnboardingState } from "@/hooks/useOnboardingState";
+import { getOnboardingStore, useOnboardingState } from "./useOnboardingState";
 import ProgressStepper from "./ProgressStepper";
 import { isConnected, getPublicKey } from "@stellar/freighter-api";
-import { SorobanRpc, TransactionBuilder, scValToNative, xdr } from "@stellar/stellar-sdk";
 import { toast } from "react-hot-toast";
+import { z } from "zod";
+
+// Stellar G... public key: starts with G, exactly 56 alphanumeric chars
+const stellarAddressSchema = z.string().regex(
+  /^G[A-Z2-7]{55}$/,
+  "Invalid Stellar address — must start with G and be 56 characters"
+);
+
+const savingsGoalSchema = z.object({
+  savingsTarget: z.number().min(500, "Goal must be at least $500").max(1_000_000, "Goal must be at most $1,000,000"),
+  savingsDuration: z.union([z.literal(6), z.literal(9), z.literal(12)], {
+    error: "Duration must be 6, 9, or 12 months",
+  }),
+});
 
 const STEPS = ["Connect Wallet", "Verify History", "Set Goal", "First Deposit"];
 
@@ -27,13 +40,10 @@ export default function OnboardingWizard() {
   const [usdcBalance, setUsdcBalance] = useState("0");
   const [isLoading, setIsLoading] = useState(false);
   const [verificationMessage, setVerificationMessage] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const HORIZON_URL = process.env.NEXT_PUBLIC_HORIZON_URL!;
-  const NETWORK_PASSPHRASE = process.env.NEXT_PUBLIC_NETWORK_PASSPHRASE!;
-  const ESCROW_CONTRACT_ID = process.env.NEXT_PUBLIC_ESCROW_CONTRACT_ID!;
   const USDC_TOKEN_ID = process.env.NEXT_PUBLIC_USDC_TOKEN_ID!;
-
-  const rpc = new SorobanRpc.Server(HORIZON_URL.replace("horizon", "rpc"));
 
   useEffect(() => {
     if (step === 1 && publicKey) {
@@ -61,14 +71,15 @@ export default function OnboardingWizard() {
 
   const fetchUSDCBalance = async (pk: string) => {
     try {
-      const server = new SorobanRpc.Server(HORIZON_URL);
-      const account = await server.getAccount(pk);
-      const usdcBalanceLine = account.balances.find(
-        (b) => "asset_code" in b && b.asset_code === "USDC" && b.asset_issuer === USDC_TOKEN_ID
+      const { Horizon } = await import("@stellar/stellar-sdk");
+      const server = new Horizon.Server(HORIZON_URL);
+      const account = await server.accounts().accountId(pk).call();
+      const usdcBalanceLine = (account.balances as any[]).find(
+        (b) => b.asset_code === "USDC" && b.asset_issuer === USDC_TOKEN_ID
       );
       setUsdcBalance(usdcBalanceLine ? parseFloat(usdcBalanceLine.balance).toFixed(2) : "0.00");
     } catch (e) {
-      console.warn("Could not fetch USDC balance. Account may not exist or have a trustline.", e);
+      console.warn("Could not fetch USDC balance.", e);
       setUsdcBalance("0.00");
     }
   };
@@ -113,54 +124,16 @@ export default function OnboardingWizard() {
     toast.loading("Preparing transaction...");
 
     try {
-      const server = new SorobanRpc.Server(HORIZON_URL);
-      const source = await server.getAccount(publicKey);
-
-      const tx = new TransactionBuilder(source, { fee: "10000", networkPassphrase: NETWORK_PASSPHRASE })
-        .addOperation(
-          xdr.Operation.invokeHostFunction({
-            hostFunction: xdr.HostFunction.invokeContract(
-              xdr.InvokeContractArgs.fromXDR(
-                Buffer.from(
-                  [
-                    "AAAAAQAAAAE=", // scvVec with 1 element
-                    "AAAAEw==", // scvSymbol
-                    "AAAAAAdkZXBvc2l0", // "deposit"
-                    "AAAAAgAAAAE=", // scvVec with 2 elements
-                    "AAAAFAAAAAMAAAAIAAAAQQ==", // scvAddress, scvAccount, public key
-                    `AAAAAAE=${Buffer.from(publicKey, "base64").toString("hex")}`,
-                    "AAAABg==", // scvI128
-                    `AAAAAQAAAAMK/wAAAAAAAAAB`, // amount
-                  ].join(""),
-                  "base64"
-                )
-              )
-            ),
-            auth: [],
-          })
-        )
-        .build();
-
-      // This is a simplified and potentially incorrect way to build the XDR.
-      // A real implementation should use a robust library or SDK function to build this.
-      // For now, we'll proceed with a placeholder to demonstrate the flow.
-      // A proper implementation would use `Soroban.parseTransaction` and `signTransaction` from `@stellar/freighter-api`.
-
+      // TODO: Build and sign Soroban deposit transaction using Contract SDK
+      // Placeholder: simulate success flow
       toast.dismiss();
-      toast.success("This is a simulated success! Transaction signing and submission would happen here.");
-      // In a real scenario:
-      // const signedTx = await signTransaction(tx.toXDR(), { networkPassphrase: NETWORK_PASSPHRASE });
-      // const result = await server.sendTransaction(signedTx);
-      // console.log(result);
-
-      // On success:
+      toast.success("Simulated deposit success! Real Soroban integration pending.");
       store.getState().reset();
       router.push("/dashboard");
-      toast.success("Deposit successful! Welcome to RemitMortgage.");
     } catch (e) {
       console.error(e);
       toast.dismiss();
-      toast.error("Deposit failed. Please check the console for details.");
+      toast.error("Deposit failed.");
     } finally {
       setIsLoading(false);
     }
@@ -199,19 +172,22 @@ export default function OnboardingWizard() {
           <div>
             <h3 className="text-xl font-semibold mb-4">Verify Your Remittance History</h3>
             <p className="text-[var(--text-secondary)] mb-6">Enter the Stellar address of the family member you regularly send remittances to.</p>
-            <div className="flex gap-2 mb-4">
+            <div className="flex gap-2 mb-1">
               <input
                 type="text"
                 placeholder="Recipient's G... address"
                 className="input-field flex-1"
                 value={recipientAddress}
-                onChange={(e) => store.getState().setRecipientAddress(e.target.value)}
+                onChange={(e) => { store.getState().setRecipientAddress(e.target.value); setFieldErrors((prev) => ({ ...prev, recipientAddress: "" })); }}
                 disabled={isLoading || isVerified}
               />
               <button onClick={handleVerify} className="btn-primary" disabled={isLoading || !recipientAddress || isVerified}>
                 {isLoading ? "Verifying..." : isVerified ? "Verified" : "Verify"}
               </button>
             </div>
+            {fieldErrors.recipientAddress && (
+              <p className="text-red-400 text-sm mb-3">{fieldErrors.recipientAddress}</p>
+            )}
             {verificationMessage && (
               <div className={`p-3 rounded-lg text-sm ${isVerified ? "bg-green-500/10 text-green-300" : "bg-red-500/10 text-red-300"}`}>
                 {verificationMessage}
@@ -231,20 +207,26 @@ export default function OnboardingWizard() {
                   type="number"
                   className="input-field w-full"
                   value={savingsTarget}
-                  onChange={(e) => store.getState().setSavingsTarget(Number(e.target.value))}
+                  onChange={(e) => { store.getState().setSavingsTarget(Number(e.target.value)); setFieldErrors((prev) => ({ ...prev, savingsTarget: "" })); }}
                 />
+                {fieldErrors.savingsTarget && (
+                  <p className="text-red-400 text-sm mt-1">{fieldErrors.savingsTarget}</p>
+                )}
               </div>
               <div>
                 <label className="text-sm text-[var(--text-muted)]">Savings Duration</label>
                 <select
                   className="input-field w-full"
                   value={savingsDuration}
-                  onChange={(e) => store.getState().setSavingsDuration(Number(e.target.value))}
+                  onChange={(e) => { store.getState().setSavingsDuration(Number(e.target.value)); setFieldErrors((prev) => ({ ...prev, savingsDuration: "" })); }}
                 >
                   <option value={6}>6 Months</option>
                   <option value={9}>9 Months</option>
                   <option value={12}>12 Months</option>
                 </select>
+                {fieldErrors.savingsDuration && (
+                  <p className="text-red-400 text-sm mt-1">{fieldErrors.savingsDuration}</p>
+                )}
               </div>
               <div className="glass-card p-4 text-center">
                 <p className="text-sm text-[var(--text-muted)]">Estimated Monthly Contribution</p>
@@ -279,6 +261,30 @@ export default function OnboardingWizard() {
     }
   };
 
+  const validateStep = (): boolean => {
+    const errors: Record<string, string> = {};
+
+    if (step === 2) {
+      const result = stellarAddressSchema.safeParse(recipientAddress);
+      if (!result.success) {
+        errors.recipientAddress = result.error.issues[0].message;
+      }
+    }
+
+    if (step === 3) {
+      const result = savingsGoalSchema.safeParse({ savingsTarget, savingsDuration });
+      if (!result.success) {
+        result.error.issues.forEach((issue) => {
+          const field = issue.path[0] as string;
+          if (!errors[field]) errors[field] = issue.message;
+        });
+      }
+    }
+
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
   const canGoNext = () => {
     switch (step) {
       case 1:
@@ -307,7 +313,7 @@ export default function OnboardingWizard() {
           Back
         </button>
         <button
-          onClick={() => store.getState().setStep(step + 1)}
+          onClick={() => { if (validateStep()) store.getState().setStep(step + 1); }}
           className="btn-primary"
           disabled={!canGoNext() || isLoading}
         >

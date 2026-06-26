@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: remitmortgage-postgres
+    environment:
+      POSTGRES_USER: remituser
+      POSTGRES_PASSWORD: remitpass
+      POSTGRES_DB: remitmortgage
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U remituser -d remitmortgage"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: remitmortgage-backend
+    environment:
+      DATABASE_URL: postgresql://remituser:remitpass@postgres:5432/remitmortgage
+      PORT: 4000
+      STELLAR_NETWORK: testnet
+      HORIZON_URL: http://stellar-quickstart:8000
+    ports:
+      - "4000:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  stellar-quickstart:
+    image: stellar/quickstart:latest
+    container_name: stellar-quickstart
+    ports:
+      - "8000:8000"
+    # Command arguments for running a standalone local network.
+    # --local mode runs Horizon, Soroban RPC, Friendbot, and Core in local network mode.
+    # --enable-soroban-rpc starts the Soroban RPC server inside the container.
+    command: >
+      /start --local --enable-soroban-rpc
+    environment:
+      - NETWORK=local
+    volumes:
+      - stellar-data:/opt/stellar
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  stellar-data:

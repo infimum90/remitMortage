@@ -24,4 +24,16 @@ pub enum PoolError {
     InsufficientLiquidity = 9,
     /// Repayment exceeds remaining loan balance.
     OverPayment = 10,
+    /// No pending upgrade exists to execute.
+    UpgradeNotPending = 11,
+    /// Upgrade was proposed but the timelock delay has not elapsed yet.
+    UpgradeTimelockActive = 12,
+    /// Investor cannot change tranche after the initial deposit.
+    TrancheMismatch = 15,
+    /// Junior tranche has insufficient capital to absorb this loss.
+    InsufficientJuniorCapital = 16,
+    /// Operation rejected because the contract is paused.
+    ContractPaused = 13,
+    /// Proposed new admin is not the caller or no transfer is pending.
+    NotPendingAdmin = 14,
 }

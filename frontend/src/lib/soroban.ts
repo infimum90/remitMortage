@@ -1,0 +1,131 @@
+import {
+  Contract,
+  TransactionBuilder,
+  Networks,
+  BASE_FEE,
+  nativeToScVal,
+  Address,
+} from "@stellar/stellar-sdk";
+import { getRpcServer } from "./soroban-rpc";
+import { storeTxSuccessFeedback } from "./transaction-status";
+
+const DEFAULT_NETWORK = Networks.TESTNET;
+const DEFAULT_GOAL = "savings";
+
+function escrowContractId(): string {
+  return process.env.NEXT_PUBLIC_ESCROW_CONTRACT_ID || "";
+}
+
+function networkPassphrase(): string {
+  return process.env.NEXT_PUBLIC_NETWORK_PASSPHRASE || DEFAULT_NETWORK;
+}
+
+export async function buildDepositTx(borrower: string, amount: string): Promise<string> {
+  const server = getRpcServer();
+  const source = await server.getAccount(borrower);
+  const contract = new Contract(escrowContractId());
+  const amountStroops = BigInt(Math.round(parseFloat(amount) * 10_000_000));
+
+  const tx = new TransactionBuilder(source, {
+    fee: BASE_FEE,
+    networkPassphrase: networkPassphrase(),
+  })
+    .addOperation(
+      contract.call(
+        "deposit",
+        Address.fromString(borrower).toScVal(),
+        nativeToScVal(DEFAULT_GOAL, { type: "symbol" }),
+        nativeToScVal(amountStroops, { type: "i128" })
+      )
+    )
+    .setTimeout(300)
+    .build();
+
+  const simulated = await server.simulateTransaction(tx);
+  if (simulated.error) {
+    throw new Error(`Simulation failed: ${simulated.error}`);
+  }
+
+  const prepared = TransactionBuilder.cloneFrom(tx, {
+    sorobanData: simulated.transactionData.build(),
+  });
+  return prepared.toXDR();
+}
+
+export async function buildWithdrawTx(borrower: string): Promise<string> {
+  const server = getRpcServer();
+  const source = await server.getAccount(borrower);
+  const contract = new Contract(escrowContractId());
+
+  const tx = new TransactionBuilder(source, {
+    fee: BASE_FEE,
+    networkPassphrase: networkPassphrase(),
+  })
+    .addOperation(
+      contract.call(
+        "withdraw",
+        Address.fromString(borrower).toScVal(),
+        nativeToScVal(DEFAULT_GOAL, { type: "symbol" })
+      )
+    )
+    .setTimeout(300)
+    .build();
+
+  const simulated = await server.simulateTransaction(tx);
+  if (simulated.error) {
+    throw new Error(`Simulation failed: ${simulated.error}`);
+  }
+
+  const prepared = TransactionBuilder.cloneFrom(tx, {
+    sorobanData: simulated.transactionData.build(),
+  });
+  return prepared.toXDR();
+}
+
+export async function signAndSubmit(txXdr: string): Promise<string> {
+  const freighter = await import("@stellar/freighter-api");
+  if (typeof freighter.signTransaction !== "function") {
+    throw new Error("Freighter signing API is unavailable");
+  }
+
+  const signedXdr = await freighter.signTransaction(txXdr, {
+    networkPassphrase: networkPassphrase(),
+  });
+
+  const server = getRpcServer();
+  const tx = TransactionBuilder.fromXDR(signedXdr, networkPassphrase());
+  const sendResponse = await server.sendTransaction(tx);
+
+  if (sendResponse.error) {
+    throw new Error(`Submission failed: ${sendResponse.error}`);
+  }
+
+  storeTxSuccessFeedback(sendResponse.hash, "Deposit");
+  return sendResponse.hash;
+}
+
+export async function queryEscrowConfig(publicKey: string): Promise<{ earlyWithdrawalPenaltyBps: number; savingsTarget: string }> {
+  const server = getRpcServer();
+  const source = await server.getAccount(publicKey);
+  const contract = new Contract(escrowContractId());
+
+  const tx = new TransactionBuilder(source, {
+    fee: BASE_FEE,
+    networkPassphrase: networkPassphrase(),
+  })
+    .addOperation(contract.call("get_escrow_config"))
+    .setTimeout(300)
+    .build();
+
+  const simulated = await server.simulateTransaction(tx);
+  if (simulated.error) {
+    return { earlyWithdrawalPenaltyBps: 500, savingsTarget: "0" };
+  }
+
+  const result = simulated.result as any;
+  const val = result.retval;
+  return {
+    earlyWithdrawalPenaltyBps: Number(val._attributes.early_withdrawal_penalty_bps) || 500,
+    savingsTarget: (val._attributes.savings_target?.toString() || "0"),
+  };
+}
