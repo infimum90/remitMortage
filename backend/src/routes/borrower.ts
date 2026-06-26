@@ -37,7 +37,9 @@ export const borrowerRouter = Router();
  */
 borrowerRouter.get("/:address/status", validateBorrowerParams, async (req, res) => {
   try {
-    const { address } = req.params;
+    const address = Array.isArray(req.params.address)
+      ? req.params.address[0]
+      : req.params.address;
 
     const applicant = await getApplicant(address).catch((err) => {
       console.error("DB read error (non-fatal):", err);

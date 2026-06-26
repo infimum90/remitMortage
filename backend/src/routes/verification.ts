@@ -5,7 +5,10 @@ import { analyzeRemittanceHistory } from "../services/stellar.js";
 import { hashReportContent, streamVerificationPdf, VerificationReport } from "../services/pdf.js";
 import { calculateCreditScore } from "../services/scoring.js";
 import { validateVerificationBody, validateWalletAddress, validateMultiChainOwnership } from "../middleware/validate.js";
-import { verificationChallengeRateLimiter } from "../middleware/rateLimit.js";
+import {
+  verificationChallengeRateLimiter,
+  verificationOwnershipRateLimiter,
+} from "../middleware/rateLimit.js";
 import { createChallenge, consumeChallenge } from "../services/challengeStore.js";
 import { verifyEvmSignature } from "../services/evm.js";
 import { verifySolanaSignature } from "../services/solana.js";
@@ -70,7 +73,7 @@ verificationRouter.post("/check", validateVerificationBody, async (req, res) => 
         applicantId: applicant.id,
         reportHash,
         totalPayments: analysis.totalPayments,
-        totalVolume: Number(analysis.totalVolume),
+        totalVolume: Number(analysis.totalAmountUSDC),
         spanMonths: analysis.spanMonths,
         eligible: analysis.eligible,
       });
@@ -253,7 +256,7 @@ verificationRouter.post("/challenge", verificationChallengeRateLimiter, validate
  *       410:
  *         description: Challenge expired or already used.
  */
-verificationRouter.post("/verify-ownership", verificationChallengeRateLimiter, validateMultiChainOwnership, (req, res) => {
+verificationRouter.post("/verify-ownership", verificationOwnershipRateLimiter, validateMultiChainOwnership, (req, res) => {
   const { walletAddress, network, challenge, signature } = req.body;
 
   if (!challenge || !signature) {

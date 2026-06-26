@@ -1,16 +1,13 @@
-import { PrismaClient, VerificationStatus } from "@prisma/client";
+const { PrismaClient } = require("@prisma/client") as {
+  PrismaClient: new () => any;
+};
 
-let prisma: PrismaClient;
+export type VerificationStatus = "PENDING" | "ELIGIBLE" | "INELIGIBLE";
 
-function getClient(): PrismaClient {
-  if (!prisma) {
-    prisma = new PrismaClient();
-  }
-  return prisma;
-}
+export const prisma = new PrismaClient();
 
 export async function disconnect(): Promise<void> {
-  if (prisma) await prisma.$disconnect();
+  await prisma.$disconnect();
 }
 
 // ── Applicant ─────────────────────────────────────────────────────────────
@@ -19,7 +16,7 @@ export async function upsertApplicant(
   stellarAddress: string,
   data: { verificationStatus?: VerificationStatus; creditScore?: number }
 ) {
-  return getClient().applicant.upsert({
+  return prisma.applicant.upsert({
     where: { stellarAddress },
     update: { ...data, updatedAt: new Date() },
     create: { stellarAddress, ...data },
@@ -27,7 +24,7 @@ export async function upsertApplicant(
 }
 
 export async function getApplicant(stellarAddress: string) {
-  return getClient().applicant.findUnique({
+  return prisma.applicant.findUnique({
     where: { stellarAddress },
     include: {
       verificationResults: { orderBy: { analyzedAt: "desc" }, take: 1 },
@@ -46,7 +43,7 @@ export async function createVerificationResult(data: {
   spanMonths: number;
   eligible: boolean;
 }) {
-  return getClient().verificationResult.create({ data });
+  return prisma.verificationResult.create({ data });
 }
 
 // ── LoanApplication ────────────────────────────────────────────────────────
@@ -57,5 +54,5 @@ export async function createLoanApplication(data: {
   loanId?: string;
   principal: number;
 }) {
-  return getClient().loanApplication.create({ data });
+  return prisma.loanApplication.create({ data });
 }

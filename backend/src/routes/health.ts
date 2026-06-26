@@ -60,7 +60,7 @@ healthRouter.get("/", async (_req, res) => {
 
   const response = {
     status: allHealthy ? "ok" : "degraded",
-    service: "remitmortage-api",
+    service: "remitmortgage-api",
     timestamp: new Date().toISOString(),
     components: {
       database,

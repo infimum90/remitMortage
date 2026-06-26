@@ -249,6 +249,7 @@ function RepayInner() {
   useEffect(() => {
     if (!publicKey) return;
 
+    const accountId = publicKey;
     let cancelled = false;
 
     async function loadHistory() {
@@ -258,7 +259,7 @@ function RepayInner() {
         const server = new Horizon.Server(HORIZON_TESTNET);
         const result = await server
           .payments()
-          .forAccount(publicKey)
+          .forAccount(accountId)
           .limit(PAGE_SIZE)
           .order("desc")
           .call();
