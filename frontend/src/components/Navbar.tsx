@@ -11,9 +11,11 @@ const NAV_LINKS = [
   { href: "#how-it-works", label: "How It Works" },
   { href: "#features", label: "Features" },
   { href: "#stats", label: "Protocol" },
+  { href: "/verify", label: "Check Eligibility" },
   { href: "/invest", label: "Invest" },
   { href: "/analytics", label: "Analytics" },
   { href: "/dashboard", label: "Dashboard" },
+  { href: "/admin", label: "Admin" },
 ];
 
 function InnerNavbar() {
