@@ -10,9 +10,10 @@ pub mod test_utils;
 #[cfg(test)]
 mod fuzz_tests;
 
-use crate::errors::EscrowError;
+pub use crate::errors::EscrowError;
 use crate::token_utils::get_token_client;
-use crate::types::{BorrowerRecord, DataKey, EscrowConfig, PendingUpgradeRecord};
+use crate::types::DataKey;
+pub use crate::types::{BorrowerRecord, EscrowConfig, PendingUpgradeRecord};
 use lending_pool::LendingPoolContractClient;
 use soroban_sdk::{contract, contractimpl, symbol_short, xdr::ToXdr, Address, BytesN, Env, Symbol};
 

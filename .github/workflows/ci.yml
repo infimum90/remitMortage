@@ -39,6 +39,10 @@ jobs:
         run: cargo test
         working-directory: contracts
 
+      - name: Run Cross-Contract Integration Tests
+        run: cargo test -p integration-tests
+        working-directory: contracts
+
   # ── Backend CI ──────────────────────────────────────────────────────────
   backend-ci:
     name: Backend CI (Express & TS)

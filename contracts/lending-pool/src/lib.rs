@@ -187,6 +187,14 @@ impl LendingPoolContract {
             .set(&DataKey::Loan(loan_id.clone()), record);
     }
 
+    /// Returns whether `contractor` is on the disbursement whitelist.
+    fn is_contractor_whitelisted(env: &Env, contractor: &Address) -> bool {
+        env.storage()
+            .persistent()
+            .get(&DataKey::Whitelist(contractor.clone()))
+            .unwrap_or(false)
+    }
+
     fn token_client<'a>(env: &'a Env, token_addr: &'a Address) -> token::Client<'a> {
         token::Client::new(env, token_addr)
     }
@@ -629,6 +637,11 @@ impl LendingPoolContract {
             env.storage()
                 .instance()
                 .set(&DataKey::DailyBorrowed(day_id), &(current_day_borrowed + amount));
+        }
+
+        // Only vetted, whitelisted contractors may receive disbursements.
+        if !Self::is_contractor_whitelisted(&env, &recipient) {
+            return Err(PoolError::UnauthorizedContractor);
         }
 
         // Transfer funds to recipient.
@@ -1537,6 +1550,57 @@ impl LendingPoolContract {
             .unwrap_or(0)
     }
 
+    // ── Contractor Whitelist ─────────────────────────────────────────────
+
+    /// Add a contractor to the disbursement whitelist. Admin-only.
+    ///
+    /// Only whitelisted addresses can receive funds via `disburse`, per the
+    /// architecture's requirement that disbursements go to vetted real estate
+    /// companies, contractors, and suppliers.
+    pub fn add_contractor(env: Env, contractor: Address) -> Result<(), PoolError> {
+        let config = Self::read_config(&env)?;
+        config.admin.require_auth();
+
+        env.storage()
+            .persistent()
+            .set(&DataKey::Whitelist(contractor.clone()), &true);
+        env.storage()
+            .instance()
+            .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
+
+        env.events().publish(
+            (symbol_short!("wl_add"),),
+            (contractor,),
+        );
+
+        Ok(())
+    }
+
+    /// Remove a contractor from the disbursement whitelist. Admin-only.
+    pub fn remove_contractor(env: Env, contractor: Address) -> Result<(), PoolError> {
+        let config = Self::read_config(&env)?;
+        config.admin.require_auth();
+
+        env.storage()
+            .persistent()
+            .remove(&DataKey::Whitelist(contractor.clone()));
+        env.storage()
+            .instance()
+            .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
+
+        env.events().publish(
+            (symbol_short!("wl_rm"),),
+            (contractor,),
+        );
+
+        Ok(())
+    }
+
+    /// Returns whether `contractor` is on the disbursement whitelist.
+    pub fn is_whitelisted(env: Env, contractor: Address) -> bool {
+        Self::is_contractor_whitelisted(&env, &contractor)
+    }
+
     // ── Upgrade Functions ────────────────────────────────────────────────
 
     /// Set the number of ledgers that must elapse between proposing and
@@ -2085,6 +2149,9 @@ mod test {
         client.request_loan(&borrower, &loan_id, &70_000_0000000i128);
         client.approve_loan(&loan_id);
 
+        // Whitelist the contractor before disbursing.
+        client.add_contractor(&contractor);
+
         // Disburse 30,000 to contractor (first milestone).
         client.disburse(&loan_id, &contractor, &30_000_0000000i128);
         assert_eq!(token.balance(&contractor), 30_000_0000000i128);
@@ -2120,6 +2187,7 @@ mod test {
         client.deposit(&investor, &50_000_0000000i128, &Tranche::Senior);
         client.request_loan(&borrower, &loan_id, &10_000_0000000i128);
         client.approve_loan(&loan_id);
+        client.add_contractor(&contractor);
 
         // Try to disburse more than principal.
         let result = client.try_disburse(&loan_id, &contractor, &20_000_0000000i128);
@@ -2168,6 +2236,7 @@ mod test {
 
         client.request_loan(&borrower, &loan_id, &10_000_0000000i128);
         client.approve_loan(&loan_id);
+        client.add_contractor(&borrower);
         client.disburse(&loan_id, &borrower, &10_000_0000000i128);
 
         // Advance ledger by 1 period to compound interest
@@ -2211,6 +2280,7 @@ mod test {
         // Loan 20,000; junior has 30,000 to absorb.
         client.request_loan(&borrower, &loan_id, &20_000_0000000i128);
         client.approve_loan(&loan_id);
+        client.add_contractor(&borrower);
         client.disburse(&loan_id, &borrower, &20_000_0000000i128);
 
         client.mark_default(&loan_id);
@@ -2254,6 +2324,7 @@ mod test {
         // Loan 20,000; junior has only 5,000 to absorb.
         client.request_loan(&borrower, &loan_id, &20_000_0000000i128);
         client.approve_loan(&loan_id);
+        client.add_contractor(&borrower);
         client.disburse(&loan_id, &borrower, &20_000_0000000i128);
 
         make_loan_overdue(&env, &client, &loan_id);
@@ -2308,6 +2379,7 @@ mod test {
         client.deposit(&investor, &100_000_0000000i128, &Tranche::Senior);
         client.request_loan(&borrower, &loan_id, &10_000_0000000i128);
         client.approve_loan(&loan_id);
+        client.add_contractor(&borrower);
         client.disburse(&loan_id, &borrower, &10_000_0000000i128);
         env.ledger().set_sequence_number(env.ledger().sequence() + 100);
 
@@ -2335,6 +2407,7 @@ mod test {
         client.deposit(&investor, &100_000_0000000i128, &Tranche::Senior);
         client.request_loan(&borrower, &loan_id, &10_000_0000000i128);
         client.approve_loan(&loan_id);
+        client.add_contractor(&borrower);
         client.disburse(&loan_id, &borrower, &10_000_0000000i128);
         env.ledger().set_sequence_number(env.ledger().sequence() + 100);
 
@@ -2519,6 +2592,7 @@ mod test {
         client.deposit(&investor, &100_000_0000000i128, &Tranche::Senior);
         client.request_loan(&borrower, &loan_id, &80_000_0000000i128);
         client.approve_loan(&loan_id);
+        client.add_contractor(&borrower);
         client.disburse(&loan_id, &borrower, &80_000_0000000i128);
 
         // High utilization during active loan
@@ -2707,6 +2781,7 @@ mod test {
         let loan_id = BytesN::from_array(&env, &[42u8; 32]);
         client.request_loan(&borrower, &loan_id, &10_000_0000000i128);
         client.approve_loan(&loan_id);
+        client.add_contractor(&borrower);
 
         // Disburse the full principal.
         client.disburse(&loan_id, &borrower, &10_000_0000000i128);
@@ -2844,6 +2919,7 @@ mod test {
         client.deposit(&investor, &50_000_0000000i128, &Tranche::Senior);
         client.request_loan(&borrower, &loan_id, &10_000_0000000i128);
         client.approve_loan(&loan_id);
+        client.add_contractor(&borrower);
         client.disburse(&loan_id, &borrower, &10_000_0000000i128);
 
         let sac = StellarAssetClient::new(&env, &token_address);
@@ -3154,6 +3230,7 @@ mod test {
         let loan_id = mock_loan_id(&env);
         client.request_loan(&borrower, &loan_id, &50_000_0000000i128);
         client.approve_loan(&loan_id);
+        client.add_contractor(&contractor);
 
         // Disburse 10k -> should succeed.
         client.disburse(&loan_id, &contractor, &10_000_0000000i128);
@@ -3177,5 +3254,139 @@ mod test {
         // Disburse 10k -> should fail.
         let result2 = client.try_disburse(&loan_id, &contractor, &10_000_0000000i128);
         assert_eq!(result2.unwrap_err(), Ok(PoolError::DailyBorrowLimitExceeded));
+    }
+
+    // ── Contractor Whitelist Tests ───────────────────────────────────────
+
+    #[test]
+    fn test_is_whitelisted_returns_correct_boolean() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let (_admin, _investor, _treasury, _token_address, client) = setup_pool(&env);
+        let contractor = Address::generate(&env);
+
+        // Not whitelisted by default.
+        assert!(!client.is_whitelisted(&contractor));
+
+        client.add_contractor(&contractor);
+        assert!(client.is_whitelisted(&contractor));
+
+        client.remove_contractor(&contractor);
+        assert!(!client.is_whitelisted(&contractor));
+    }
+
+    #[test]
+    fn test_disburse_to_whitelisted_contractor_succeeds() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let (_admin, investor, _treasury, token_address, client) = setup_pool(&env);
+        let token = token::Client::new(&env, &token_address);
+        let borrower = Address::generate(&env);
+        let contractor = Address::generate(&env);
+        let loan_id = mock_loan_id(&env);
+
+        client.deposit(&investor, &50_000_0000000i128, &Tranche::Senior);
+        client.request_loan(&borrower, &loan_id, &10_000_0000000i128);
+        client.approve_loan(&loan_id);
+
+        client.add_contractor(&contractor);
+        client.disburse(&loan_id, &contractor, &10_000_0000000i128);
+
+        assert_eq!(token.balance(&contractor), 10_000_0000000i128);
+    }
+
+    #[test]
+    fn test_disburse_to_non_whitelisted_contractor_fails() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let (_admin, investor, _treasury, _token_address, client) = setup_pool(&env);
+        let borrower = Address::generate(&env);
+        let contractor = Address::generate(&env);
+        let loan_id = mock_loan_id(&env);
+
+        client.deposit(&investor, &50_000_0000000i128, &Tranche::Senior);
+        client.request_loan(&borrower, &loan_id, &10_000_0000000i128);
+        client.approve_loan(&loan_id);
+
+        // Recipient was never whitelisted.
+        let result = client.try_disburse(&loan_id, &contractor, &10_000_0000000i128);
+        assert_eq!(result.unwrap_err(), Ok(PoolError::UnauthorizedContractor));
+    }
+
+    #[test]
+    fn test_disburse_fails_after_contractor_removed() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let (_admin, investor, _treasury, _token_address, client) = setup_pool(&env);
+        let borrower = Address::generate(&env);
+        let contractor = Address::generate(&env);
+        let loan_id = mock_loan_id(&env);
+
+        client.deposit(&investor, &50_000_0000000i128, &Tranche::Senior);
+        client.request_loan(&borrower, &loan_id, &10_000_0000000i128);
+        client.approve_loan(&loan_id);
+
+        client.add_contractor(&contractor);
+        client.remove_contractor(&contractor);
+
+        let result = client.try_disburse(&loan_id, &contractor, &5_000_0000000i128);
+        assert_eq!(result.unwrap_err(), Ok(PoolError::UnauthorizedContractor));
+    }
+
+    #[test]
+    fn test_only_admin_can_add_contractor() {
+        use soroban_sdk::testutils::{MockAuth, MockAuthInvoke};
+        use soroban_sdk::IntoVal;
+
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let (_admin, _investor, _treasury, _token_address, client) = setup_pool(&env);
+        let non_admin = Address::generate(&env);
+        let contractor = Address::generate(&env);
+
+        // Only the non-admin signs; add_contractor requires the pool admin's
+        // authorization, so the call must fail.
+        env.mock_auths(&[MockAuth {
+            address: &non_admin,
+            invoke: &MockAuthInvoke {
+                contract: &client.address,
+                fn_name: "add_contractor",
+                args: (contractor.clone(),).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        let result = client.try_add_contractor(&contractor);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_only_admin_can_remove_contractor() {
+        use soroban_sdk::testutils::{MockAuth, MockAuthInvoke};
+        use soroban_sdk::IntoVal;
+
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let (_admin, _investor, _treasury, _token_address, client) = setup_pool(&env);
+        let contractor = Address::generate(&env);
+        client.add_contractor(&contractor);
+
+        let non_admin = Address::generate(&env);
+        env.mock_auths(&[MockAuth {
+            address: &non_admin,
+            invoke: &MockAuthInvoke {
+                contract: &client.address,
+                fn_name: "remove_contractor",
+                args: (contractor.clone(),).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        let result = client.try_remove_contractor(&contractor);
+        assert!(result.is_err());
     }
 }

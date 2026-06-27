@@ -202,4 +202,7 @@ pub enum DataKey {
     DailyBorrowLimit,
     /// Tracks total amount borrowed in a specific daily window (day_id).
     DailyBorrowed(u32),
+    /// Whitelist flag for a contractor address. Present and `true` means the
+    /// address is a vetted recipient eligible to receive disbursements.
+    Whitelist(Address),
 }

@@ -43,4 +43,6 @@ pub enum PoolError {
     DailyBorrowLimitExceeded = 18,
     /// Refund amount exceeds the amount disbursed for the loan.
     RefundExceedsDisbursed = 19,
+    /// Disbursement recipient is not a whitelisted contractor.
+    UnauthorizedContractor = 20,
 }
