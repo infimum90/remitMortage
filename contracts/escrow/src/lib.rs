@@ -7,6 +7,9 @@ mod types;
 #[cfg(test)]
 pub mod test_utils;
 
+#[cfg(test)]
+mod fuzz_tests;
+
 use crate::errors::EscrowError;
 use crate::token_utils::get_token_client;
 use crate::types::{BorrowerRecord, DataKey, EscrowConfig, PendingUpgradeRecord};

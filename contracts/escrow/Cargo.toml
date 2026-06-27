@@ -13,3 +13,4 @@ lending-pool = { path = "../lending-pool" }
 
 [dev-dependencies]
 soroban-sdk = { workspace = true, features = ["testutils"] }
+proptest = "1"
