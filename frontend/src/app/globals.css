@@ -227,6 +227,29 @@ body {
   animation: pulse-glow 3s ease-in-out infinite;
 }
 
+/* ── Toast Notifications ─────────────────────────────────────────────── */
+@keyframes toast-slide-in {
+  from {
+    transform: translateX(120%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes toast-progress {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
+.animate-toast-in {
+  animation: toast-slide-in 0.3s cubic-bezier(0.21, 1.02, 0.73, 1) both;
 .animate-modal-pop {
   animation: modal-pop 0.28s cubic-bezier(0.2, 0.9, 0.25, 1) both;
 }
