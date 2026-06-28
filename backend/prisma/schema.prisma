@@ -1,6 +1,5 @@
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 generator client {
@@ -84,4 +83,16 @@ model LoanApplication {
   principal          Float
   status             LoanStatus @default(PENDING)
   createdAt          DateTime   @default(now())
+}
+
+model AuditLog {
+  id           String   @id @default(uuid())
+  action       String
+  actorAddress String?
+  ipAddress    String?
+  metadata     Json?
+  createdAt    DateTime @default(now())
+
+  @@index([action])
+  @@index([actorAddress])
 }

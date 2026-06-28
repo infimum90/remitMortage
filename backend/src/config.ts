@@ -27,6 +27,7 @@ export interface Config {
   smtpFrom: string;
   webhookSecret: string;
   allowedOrigins: string[];
+  adminApiKey: string;
 }
 
 export function loadConfig(): Config {
@@ -56,5 +57,6 @@ export function loadConfig(): Config {
     allowedOrigins: process.env.ALLOWED_ORIGINS
       ? process.env.ALLOWED_ORIGINS.split(",").map((origin) => origin.trim())
       : ["http://localhost:3000", "http://localhost:4000"],
+    adminApiKey: process.env.ADMIN_API_KEY || "default_admin_api_key",
   };
 }

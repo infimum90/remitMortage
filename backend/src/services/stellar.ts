@@ -20,7 +20,7 @@ export function createHorizonServer(
   network: StellarNetwork = "testnet"
 ): HorizonServerLike {
   const url = horizonUrl || HORIZON_URL_DEFAULTS[network];
-  return new Horizon.Server(url) as unknown as HorizonServerLike;
+  return new Horizon.Server(url, { allowHttp: url.startsWith("http://") }) as unknown as HorizonServerLike;
 }
 
 const _config = loadConfig();
@@ -56,10 +56,6 @@ export interface HorizonServerLike {
     };
   };
 }
-
-const defaultServer = new Horizon.Server(
-  config.horizonUrl
-) as unknown as HorizonServerLike;
 
 export interface PaymentStats {
   totalPayments: number;
