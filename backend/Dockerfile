@@ -21,7 +21,8 @@ FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 
-RUN addgroup --system --gid 1001 nodejs \
+RUN apk add --no-cache postgresql-client \
+ && addgroup --system --gid 1001 nodejs \
  && adduser  --system --uid 1001 appuser
 
 # Production node_modules (no dev deps)
@@ -33,6 +34,7 @@ COPY --from=builder --chown=appuser:nodejs /app/dist                   ./dist
 # Prisma schema (required for migrate deploy at container start)
 COPY --chown=appuser:nodejs prisma/    ./prisma/
 COPY --chown=appuser:nodejs package.json   ./
+COPY --chown=appuser:nodejs scripts/   ./scripts/
 
 USER appuser
 EXPOSE 4000

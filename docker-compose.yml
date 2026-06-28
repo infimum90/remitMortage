@@ -20,6 +20,18 @@ services:
       start_period: 10s
     restart: unless-stopped
 
+  migration:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: remitmortgage-migration
+    environment:
+      DATABASE_URL: postgresql://remituser:remitpass@postgres:5432/remitmortgage
+    command: sh scripts/run-migrations.sh
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   backend:
     build:
       context: ./backend
@@ -33,8 +45,8 @@ services:
     ports:
       - "4000:4000"
     depends_on:
-      postgres:
-        condition: service_healthy
+      migration:
+        condition: service_completed_successfully
     restart: unless-stopped
 
   stellar-quickstart:
