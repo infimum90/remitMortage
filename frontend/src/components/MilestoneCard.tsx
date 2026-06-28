@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { useToast } from "@/context/ToastContext";
 import EvidenceUpload from "./EvidenceUpload";
 import MilestoneTracker, { Stage } from "./MilestoneTracker";
 
@@ -13,6 +14,7 @@ interface MilestoneProps {
 export default function MilestoneCard({ id, name, initialStage }: MilestoneProps) {
   const [stage, setStage] = useState<Stage>(initialStage);
   const [cid, setCid] = useState<string | null>(null);
+  const { toast } = useToast();
 
   const handleUploadSuccess = (uploadedCid: string) => {
     setCid(uploadedCid);
@@ -20,9 +22,12 @@ export default function MilestoneCard({ id, name, initialStage }: MilestoneProps
 
   const handleRequestDisbursement = () => {
     if (!cid) return;
-    
-    // Placeholder action for future contract integration
-    alert(`Requested disbursement for ${name} using evidence CID: ${cid}`);
+
+    toast({
+      variant: "info",
+      title: "Disbursement requested",
+      message: `Requested disbursement for ${name} using evidence CID: ${cid}`,
+    });
     setStage("Proposed"); // Optimistically advance stage to Proposed
   };
 

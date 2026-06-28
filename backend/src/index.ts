@@ -1,6 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
+import cookieParser from "cookie-parser";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import swaggerUi from "swagger-ui-express";
@@ -16,6 +17,7 @@ import { errorHandler } from "./middleware/errorHandler.js";
 import { requestLogger } from "./middleware/requestLogger.js";
 import { startEventListener } from "./services/eventListener.js";
 import { startNotificationScheduler } from "./services/notification.js";
+import { startScheduler } from "./jobs/scheduler.js";
 import { loadConfig } from "./config.js";
 
 const app = express();
@@ -41,6 +43,7 @@ app.use(cors({
   credentials: true,
 }));
 app.use(express.json());
+app.use(cookieParser());
 
 // Basic rate limiter for verification endpoints: 100 requests per minute per IP
 const verificationLimiter = rateLimit({
@@ -75,6 +78,7 @@ app.listen(PORT, () => {
   // RPC node never takes down the API process.
   startEventListener();
   startNotificationScheduler();
+  startScheduler();
 });
 
 export default app;

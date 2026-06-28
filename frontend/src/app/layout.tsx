@@ -4,6 +4,8 @@ import "./globals.css";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { NotificationProvider } from "@/context/NotificationContext";
 import { NotificationLayer } from "@/components/NotificationLayer";
+import { ToastProvider } from "@/context/ToastContext";
+import { ToastContainer } from "@/components/ToastContainer";
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? "https://remitmortgage.com";
 
@@ -86,8 +88,11 @@ export default function RootLayout({
         <ThemeProvider>
           <WalletProvider>
             <NotificationProvider>
-              {children}
-              <NotificationLayer />
+              <ToastProvider>
+                {children}
+                <NotificationLayer />
+                <ToastContainer />
+              </ToastProvider>
             </NotificationProvider>
           </WalletProvider>
         </ThemeProvider>

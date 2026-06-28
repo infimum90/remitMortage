@@ -1,24 +1,30 @@
 import { Request, Response, NextFunction } from "express";
-import { loadConfig } from "../config.js";
+import jwt from "jsonwebtoken";
 
-const config = loadConfig();
+export interface AuthenticatedRequest extends Request {
+  user?: {
+    walletAddress: string;
+    network: string;
+  };
+}
 
-export function requireAdmin(req: Request, res: Response, next: NextFunction) {
-  const authHeader = req.headers.authorization;
+export function authMiddleware(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  const token = req.cookies?.token;
 
-  if (!authHeader) {
-    return res.status(401).json({ error: "missing_authorization", message: "Authorization header is required" });
+  if (!token) {
+    res.status(401).json({ error: "unauthorized", message: "Authentication token missing" });
+    return;
   }
 
-  const [scheme, token] = authHeader.split(" ");
-
-  if (scheme !== "Bearer" || !token) {
-    return res.status(401).json({ error: "invalid_authorization", message: "Invalid authorization format. Expected 'Bearer <token>'" });
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || "default_jwt_secret") as {
+      walletAddress: string;
+      network: string;
+    };
+    req.user = decoded;
+    next();
+  } catch (err) {
+    res.status(401).json({ error: "unauthorized", message: "Invalid or expired token" });
+    return;
   }
-
-  if (token !== config.adminApiKey) {
-    return res.status(403).json({ error: "forbidden", message: "Invalid admin API key" });
-  }
-
-  return next();
 }
