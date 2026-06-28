@@ -11,9 +11,11 @@ const NAV_LINKS = [
   { href: "#how-it-works", label: "How It Works" },
   { href: "#features", label: "Features" },
   { href: "#stats", label: "Protocol" },
+  { href: "/verify", label: "Check Eligibility" },
   { href: "/invest", label: "Invest" },
   { href: "/analytics", label: "Analytics" },
   { href: "/dashboard", label: "Dashboard" },
+  { href: "/admin", label: "Admin" },
 ];
 
 function InnerNavbar() {
@@ -45,6 +47,11 @@ function InnerNavbar() {
             <a href="/invest" className="hover:text-[var(--text-primary)] transition-colors">Invest</a>
             <a href="/dashboard" className="hover:text-[var(--text-primary)] transition-colors">Dashboard</a>
             <a href="/history" className="hover:text-[var(--text-primary)] transition-colors">History</a>
+            {process.env.NODE_ENV !== "production" && (
+              <a href="/developer-playground" className="text-amber-500 hover:text-amber-400 font-semibold transition-colors">
+                Playground
+              </a>
+            )}
             {NAV_LINKS.map(({ href, label }) => (
               <a key={href} href={href} className="hover:text-[var(--text-primary)] transition-colors">
                 {label}
@@ -101,6 +108,15 @@ function InnerNavbar() {
         }`}
       >
         <nav className="flex flex-col gap-1">
+          {process.env.NODE_ENV !== "production" && (
+            <a
+              href="/developer-playground"
+              onClick={() => setMenuOpen(false)}
+              className="py-3 px-3 rounded-md text-amber-500 hover:text-amber-400 hover:bg-[var(--bg-card)] transition-colors text-base font-medium"
+            >
+              Playground
+            </a>
+          )}
           {NAV_LINKS.map(({ href, label }) => (
             <a
               key={href}

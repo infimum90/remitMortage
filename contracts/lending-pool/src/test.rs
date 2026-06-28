@@ -230,3 +230,89 @@ fn test_withdrawal_fails_if_net_amount_zero() {
     let result = client.try_withdraw(&investor, &1i128);
     assert!(result.is_ok());
 }
+
+// ── Refinancing Tests ────────────────────────────────────────────────
+
+#[test]
+fn test_refinance_loan_success() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_admin, investor, _treasury, token_address, client) = setup_pool(&env);
+    let borrower = Address::generate(&env);
+    let loan_id = BytesN::from_array(&env, &[10u8; 32]);
+    
+    client.deposit(&investor, &100_000_0000000i128, &Tranche::Senior);
+    client.request_loan(&borrower, &loan_id, &50_000_0000000i128);
+    client.approve_loan(&loan_id);
+    
+    // Simulate 3 payments to become eligible
+    let sac = token::StellarAssetClient::new(&env, &token_address);
+    sac.mint(&borrower, &100_000_0000000i128);
+    
+    for _ in 0..3 {
+        // repay enough to cover monthly amount
+        client.repay(&borrower, &loan_id, &4_500_0000000i128); 
+    }
+    
+    // Refinance
+    client.refinance_loan(&loan_id, &400u32, &24u32);
+    
+    let loan = client.get_loan_info(&loan_id);
+    assert_eq!(loan.interest_rate_bps, 400u32);
+    assert_eq!(loan.previous_rate_bps, Some(800u32));
+    assert!(loan.refinanced_at_ledger.is_some());
+    
+    let sched = client.get_repayment_schedule(&loan_id).unwrap();
+    assert_eq!(sched.duration_months, 24u32);
+    assert_eq!(sched.payments_made, 0u32);
+}
+
+#[test]
+fn test_refinance_fails_insufficient_history() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_admin, investor, _treasury, _token_address, client) = setup_pool(&env);
+    let borrower = Address::generate(&env);
+    let loan_id = BytesN::from_array(&env, &[11u8; 32]);
+    
+    client.deposit(&investor, &100_000_0000000i128, &Tranche::Senior);
+    client.request_loan(&borrower, &loan_id, &50_000_0000000i128);
+    client.approve_loan(&loan_id);
+    
+    // 0 payments made, should fail
+    let res = client.try_refinance_loan(&loan_id, &400u32, &24u32);
+    assert_eq!(res.err().unwrap().unwrap(), PoolError::InsufficientPaymentHistory);
+}
+
+#[test]
+fn test_refinance_fails_rate_too_low() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_admin, investor, _treasury, _token_address, client) = setup_pool(&env);
+    let borrower = Address::generate(&env);
+    let loan_id = BytesN::from_array(&env, &[12u8; 32]);
+    
+    client.deposit(&investor, &100_000_0000000i128, &Tranche::Senior);
+    client.request_loan(&borrower, &loan_id, &50_000_0000000i128);
+    client.approve_loan(&loan_id);
+    
+    // 150 bps < 200 bps floor
+    let res = client.try_refinance_loan(&loan_id, &150u32, &24u32);
+    assert_eq!(res.err().unwrap().unwrap(), PoolError::InterestRateTooLow);
+}
+
+#[test]
+fn test_refinance_fails_invalid_state() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_admin, investor, _treasury, _token_address, client) = setup_pool(&env);
+    let borrower = Address::generate(&env);
+    let loan_id = BytesN::from_array(&env, &[13u8; 32]);
+    
+    client.deposit(&investor, &100_000_0000000i128, &Tranche::Senior);
+    client.request_loan(&borrower, &loan_id, &50_000_0000000i128);
+    
+    // Not approved yet
+    let res = client.try_refinance_loan(&loan_id, &400u32, &24u32);
+    assert_eq!(res.err().unwrap().unwrap(), PoolError::InvalidLoanState);
+}

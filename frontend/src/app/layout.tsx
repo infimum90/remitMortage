@@ -2,6 +2,10 @@ import type { Metadata, Viewport } from "next";
 import { WalletProvider } from "../context/WalletContext";
 import "./globals.css";
 import { ThemeProvider } from "@/context/ThemeContext";
+import { NotificationProvider } from "@/context/NotificationContext";
+import { NotificationLayer } from "@/components/NotificationLayer";
+import { ToastProvider } from "@/context/ToastContext";
+import { ToastContainer } from "@/components/ToastContainer";
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? "https://remitmortgage.com";
 
@@ -82,7 +86,15 @@ export default function RootLayout({
     <html lang="en">
       <body className="min-h-screen bg-[var(--bg-primary)] text-[var(--text-primary)] font-[var(--font-inter)] antialiased">
         <ThemeProvider>
-          <WalletProvider>{children}</WalletProvider>
+          <WalletProvider>
+            <NotificationProvider>
+              <ToastProvider>
+                {children}
+                <NotificationLayer />
+                <ToastContainer />
+              </ToastProvider>
+            </NotificationProvider>
+          </WalletProvider>
         </ThemeProvider>
       </body>
     </html>

@@ -23,6 +23,11 @@ export default function OnboardingPage() {
             <p className="text-[var(--text-secondary)] max-w-xl mx-auto text-sm md:text-base">
               Convert your remittance payment history into credit reputation on the Stellar network to unlock decentralized, low-interest mortgages.
             </p>
+            <div className="mt-6">
+              <a href="/verify" className="btn-primary !py-2.5 !px-6 inline-block">
+                Check Your Eligibility
+              </a>
+            </div>
           </div>
 
           {/* Tab Selection buttons */}

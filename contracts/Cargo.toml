@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "escrow",
     "governance",
+    "integration-tests",
     "lending-pool",
     "milestone",
     "verification-registry",

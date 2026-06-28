@@ -43,4 +43,12 @@ pub enum PoolError {
     DailyBorrowLimitExceeded = 18,
     /// Refund amount exceeds the amount disbursed for the loan.
     RefundExceedsDisbursed = 19,
+    /// Disbursement recipient is not a whitelisted contractor.
+    UnauthorizedContractor = 20,
+    /// Refinancing requires at least 3 successful payments.
+    InsufficientPaymentHistory = 21,
+    /// Interest rate for refinancing is below the allowed floor.
+    InterestRateTooLow = 22,
+    /// Loan cannot be refinanced.
+    RefinanceNotEligible = 23,
 }

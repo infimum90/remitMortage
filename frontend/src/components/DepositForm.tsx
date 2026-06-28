@@ -1,11 +1,13 @@
 "use client"
 
 import React, { useState } from "react";
+import { useToast } from "@/context/ToastContext";
 
 export default function DepositForm({ address }: { address: string }) {
   const [amount, setAmount] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const { toast } = useToast();
 
   function validate(): boolean {
     setError(null);
@@ -28,9 +30,18 @@ export default function DepositForm({ address }: { address: string }) {
     try {
       // No backend deposit endpoint implemented; simulate submission
       await new Promise((r) => setTimeout(r, 800));
-      alert("Deposit simulated — integrate Freighter/send tx to token contract to perform real deposit.");
+      toast({
+        variant: "success",
+        title: "Deposit simulated",
+        message: "Integrate Freighter/send tx to token contract for real deposits.",
+      });
       setAmount("");
     } catch (e: any) {
+      toast({
+        variant: "error",
+        title: "Deposit failed",
+        message: e?.message || "An unexpected error occurred.",
+      });
       setError(e?.message || "Deposit failed");
     } finally {
       setSubmitting(false);
